@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-solignition = "Count3AcZucFDPSFBAeHkQ6AvttieKUkyJ8HiQGhQwe"
+solignition = "4dWBvsjopo5Z145Xmse3Lx41G1GKpMyWMLc6p4a52T4N"
 
 [registry]
 url = "https://api.apr.dev"
