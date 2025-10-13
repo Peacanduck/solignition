@@ -1,0 +1,35 @@
+################################################################
+# Manage solignition deployment through Crypto Infrastructure as Code
+################################################################
+
+addon "svm" {
+    rpc_api_url = input.rpc_api_url
+    network_id = input.network_id
+}
+
+action "deploy_solignition" "svm::deploy_program" {
+    description = "Deploy solignition program"
+    program = svm::get_program_from_anchor_project("solignition") 
+    authority = signer.authority
+    payer = signer.payer
+    // Optional: if you want to deploy the program via a cheatcode when targeting a Surfnet, set `instant_surfnet_deployment = true`
+    // Deploying via a cheatcode will write the program data directly to the program account, rather than sending transactions.
+    // This will make deployments instantaneous, but is deviating from how the deployments will take place on devnet/mainnet.
+    // instant_surfnet_deployment = true
+}
+
+action "program_call" "svm::process_instructions" {
+    description = "Invoke instructions"
+    instruction {
+        program_idl = variable.program.idl
+        instruction_name = "initialize"
+        instruction_args = [100,500,200 ]
+        payer {
+            public_key = signer.payer.public_key
+        }
+    }
+    signers = [signer.caller]
+}
+
+
+

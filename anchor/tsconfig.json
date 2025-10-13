@@ -1,3 +1,23 @@
 {
-  "extends": "../tsconfig.json"
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    /* override ESM options from root */
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "target": "ES2020",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "types": ["mocha", "chai", "node"],
+    /* optional: if you want to use @project/anchor imports inside tests */
+    "baseUrl": ".",
+    "paths": {
+      "@coral-xyz/anchor": ["../node_modules/@coral-xyz/anchor"],
+      
+    }
+  },
+  "include": ["tests/**/*.ts", "src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }

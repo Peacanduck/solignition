@@ -4,6 +4,14 @@ use anchor_lang::solana_program::{
     program::{invoke, invoke_signed},
     system_instruction,
 };
+use anchor_spl::{
+    metadata::{
+               create_metadata_accounts_v3, mpl_token_metadata::types::DataV2,
+               CreateMetadataAccountsV3, Metadata,
+             },
+              token::{self, Mint, Token, TokenAccount, MintTo, Transfer},
+              associated_token::{AssociatedToken}
+};
 
 declare_id!("4dWBvsjopo5Z145Xmse3Lx41G1GKpMyWMLc6p4a52T4N");
 
@@ -103,7 +111,7 @@ pub mod solignition {
     /// Withdraw SOL from the vault
     pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         require!(!ctx.accounts.protocol_config.is_paused, ErrorCode::ProtocolPaused);
-        
+
         let depositor_record = &ctx.accounts.depositor_record;
         require!(amount <= depositor_record.share_amount, ErrorCode::InsufficientBalance);
         
@@ -116,8 +124,37 @@ pub mod solignition {
         let vault_seeds = &[VAULT_SEED, &[ctx.bumps.vault]];
         let signer = &[&vault_seeds[..]];
         
-        **ctx.accounts.vault.try_borrow_mut_lamports()? -= amount;
-        **ctx.accounts.depositor.try_borrow_mut_lamports()? += amount;
+       // **ctx.accounts.vault.try_borrow_mut_lamports()? -= amount;
+       // **ctx.accounts.depositor.try_borrow_mut_lamports()? += amount;
+
+        /* Transfer tokens from user to escrow token account
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.vault.to_account_info(),
+            to: ctx.accounts.depositor.to_account_info(),
+            authority: ctx.accounts.vault.to_account_info(),
+        };
+        let cpi_ctx = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            cpi_accounts
+        );
+        token::transfer(cpi_ctx, amount)?;*/
+
+        let ix = system_instruction::transfer(
+        &ctx.accounts.vault.key(),
+        &ctx.accounts.depositor.key(),
+        amount,
+        );
+        invoke_signed(
+            &ix,
+            &[
+                ctx.accounts.vault.to_account_info(),
+                ctx.accounts.depositor.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
+            signer,
+        )?;
+
+
 
         // Update depositor record
         let depositor_record = &mut ctx.accounts.depositor_record;
@@ -187,9 +224,24 @@ pub mod solignition {
         let vault_seeds = &[VAULT_SEED, &[ctx.bumps.vault]];
         let signer = &[&vault_seeds[..]];
         
-        **ctx.accounts.vault.try_borrow_mut_lamports()? -= principal;
-        **ctx.accounts.deployer_pda.try_borrow_mut_lamports()? += principal;
+        //**ctx.accounts.vault.try_borrow_mut_lamports()? -= principal;
+        //**ctx.accounts.deployer_pda.try_borrow_mut_lamports()? += principal;
 
+        let ix = system_instruction::transfer(
+        &ctx.accounts.vault.key(),
+        &ctx.accounts.deployer_pda.key(),
+        principal,
+         );
+        invoke_signed(
+            &ix,
+            &[
+                ctx.accounts.vault.to_account_info(),
+                ctx.accounts.deployer_pda.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
+            signer,
+        )?;
+        
         // Create loan record
         let loan = &mut ctx.accounts.loan;
         loan.loan_id = loan_id;
@@ -872,6 +924,7 @@ impl Loan {
     pub const SIZE: usize = 8 + 32 + 32 + 8 + 8 + 2 + 2 + 8 + 8 + 1 + 32 + 9 + 9 + 9 + 9 + 9 + 8;
 }
 
+#[derive(Debug)]
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq)]
 pub enum LoanState {
     Active,
@@ -1002,4 +1055,349 @@ pub enum ErrorCode {
     ProgramAlreadySet,
     #[msg("Invalid program pubkey")]
     InvalidProgram,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ===== CALCULATE INTEREST TESTS =====
+
+    #[test]
+    fn test_calculate_interest_zero_principal() {
+        let principal = 0;
+        let rate_bps = 500; // 5%
+        let elapsed = 31_536_000; // 1 year
+        
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert_eq!(interest, 0);
+    }
+
+    #[test]
+    fn test_calculate_interest_zero_rate() {
+        let principal = 1_000_000_000; // 1 SOL
+        let rate_bps = 0;
+        let elapsed = 31_536_000; // 1 year
+        
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert_eq!(interest, 0);
+    }
+
+    #[test]
+    fn test_calculate_interest_zero_time() {
+        let principal = 1_000_000_000; // 1 SOL
+        let rate_bps = 500; // 5%
+        let elapsed = 0;
+        
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert_eq!(interest, 0);
+    }
+
+    #[test]
+    fn test_calculate_interest_one_year_simple() {
+        let principal = 1_000_000_000; // 1 SOL (1 billion lamports)
+        let rate_bps = 500; // 5%
+        let elapsed = 31_536_000; // 1 year in seconds
+        
+        // Expected: 1 SOL * 5% * 1 year = 0.05 SOL = 50_000_000 lamports
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert_eq!(interest, 50_000_000);
+    }
+
+    #[test]
+    fn test_calculate_interest_half_year() {
+        let principal = 1_000_000_000; // 1 SOL
+        let rate_bps = 1000; // 10%
+        let elapsed = 15_768_000; // 0.5 year in seconds
+        
+        // Expected: 1 SOL * 10% * 0.5 year = 0.05 SOL = 50_000_000 lamports
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert_eq!(interest, 50_000_000);
+    }
+
+    #[test]
+    fn test_calculate_interest_one_month() {
+        let principal = 10_000_000_000; // 10 SOL
+        let rate_bps = 1200; // 12% annual
+        let elapsed = 2_628_000; // ~1 month (1/12 year)
+        
+        // Expected: 10 SOL * 12% * (1/12) = 0.1 SOL = 100_000_000 lamports
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert_eq!(interest, 100_000_000);
+    }
+
+    #[test]
+    fn test_calculate_interest_one_day() {
+        let principal = 1_000_000_000; // 1 SOL
+        let rate_bps = 730; // 7.3% annual
+        let elapsed = 86_400; // 1 day in seconds
+        
+        // Expected: 1 SOL * 7.3% * (1/365) ≈ 200_000 lamports
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert_eq!(interest, 200_000);
+    }
+
+    #[test]
+    fn test_calculate_interest_large_principal() {
+        let principal = 100_000_000_000; // 100 SOL
+        let rate_bps = 800; // 8%
+        let elapsed = 31_536_000; // 1 year
+        
+        // Expected: 100 SOL * 8% * 1 year = 8 SOL = 8_000_000_000 lamports
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert_eq!(interest, 8_000_000_000);
+    }
+
+    #[test]
+    fn test_calculate_interest_max_rate() {
+        let principal = 1_000_000_000; // 1 SOL
+        let rate_bps = 10000; // 100%
+        let elapsed = 31_536_000; // 1 year
+        
+        // Expected: 1 SOL * 100% * 1 year = 1 SOL = 1_000_000_000 lamports
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert_eq!(interest, 1_000_000_000);
+    }
+
+    #[test]
+    fn test_calculate_interest_small_amounts() {
+        let principal = 1_000_000; // 0.001 SOL
+        let rate_bps = 500; // 5%
+        let elapsed = 31_536_000; // 1 year
+        
+        // Expected: 0.001 SOL * 5% * 1 year = 0.00005 SOL = 50_000 lamports
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert_eq!(interest, 50_000);
+    }
+
+    #[test]
+    fn test_calculate_interest_multiple_years() {
+        let principal = 5_000_000_000; // 5 SOL
+        let rate_bps = 600; // 6%
+        let elapsed = 63_072_000; // 2 years
+        
+        // Expected: 5 SOL * 6% * 2 years = 0.6 SOL = 600_000_000 lamports
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert_eq!(interest, 600_000_000);
+    }
+
+    #[test]
+    fn test_calculate_interest_fractional_bps() {
+        let principal = 10_000_000_000; // 10 SOL
+        let rate_bps = 123; // 1.23%
+        let elapsed = 31_536_000; // 1 year
+        
+        // Expected: 10 SOL * 1.23% * 1 year = 0.123 SOL = 123_000_000 lamports
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert_eq!(interest, 123_000_000);
+    }
+
+    #[test]
+    fn test_calculate_interest_very_short_duration() {
+        let principal = 1_000_000_000; // 1 SOL
+        let rate_bps = 500; // 5%
+        let elapsed = 3600; // 1 hour
+        
+        // Expected: very small interest for 1 hour
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert!(interest < 10_000); // Should be less than 0.00001 SOL
+    }
+
+    // ===== DISTRIBUTE YIELD TESTS =====
+
+    #[test]
+    fn test_distribute_yield_zero_deposits() {
+        let mut config = ProtocolConfig {
+            admin: Pubkey::default(),
+            treasury: Pubkey::default(),
+            deployer: Pubkey::default(),
+            admin_fee_split_bps: 5000,
+            default_interest_rate_bps: 500,
+            default_admin_fee_bps: 100,
+            total_deposits: 0,
+            total_loans_outstanding: 0,
+            total_yield_distributed: 0,
+            loan_counter: 0,
+            is_paused: false,
+        };
+
+        let initial_yield = config.total_yield_distributed;
+        distribute_yield(&mut config, 1_000_000);
+        
+        // Should not increase yield when no deposits
+        assert_eq!(config.total_yield_distributed, initial_yield);
+    }
+
+    #[test]
+    fn test_distribute_yield_zero_amount() {
+        let mut config = ProtocolConfig {
+            admin: Pubkey::default(),
+            treasury: Pubkey::default(),
+            deployer: Pubkey::default(),
+            admin_fee_split_bps: 5000,
+            default_interest_rate_bps: 500,
+            default_admin_fee_bps: 100,
+            total_deposits: 10_000_000_000,
+            total_loans_outstanding: 0,
+            total_yield_distributed: 0,
+            loan_counter: 0,
+            is_paused: false,
+        };
+
+        let initial_yield = config.total_yield_distributed;
+        distribute_yield(&mut config, 0);
+        
+        // Should not change when amount is zero
+        assert_eq!(config.total_yield_distributed, initial_yield);
+    }
+
+    #[test]
+    fn test_distribute_yield_normal_case() {
+        let mut config = ProtocolConfig {
+            admin: Pubkey::default(),
+            treasury: Pubkey::default(),
+            deployer: Pubkey::default(),
+            admin_fee_split_bps: 5000,
+            default_interest_rate_bps: 500,
+            default_admin_fee_bps: 100,
+            total_deposits: 10_000_000_000, // 10 SOL
+            total_loans_outstanding: 5_000_000_000,
+            total_yield_distributed: 0,
+            loan_counter: 1,
+            is_paused: false,
+        };
+
+        let yield_amount = 500_000_000; // 0.5 SOL
+        distribute_yield(&mut config, yield_amount);
+        
+        assert_eq!(config.total_yield_distributed, yield_amount);
+    }
+
+    #[test]
+    fn test_distribute_yield_multiple_distributions() {
+        let mut config = ProtocolConfig {
+            admin: Pubkey::default(),
+            treasury: Pubkey::default(),
+            deployer: Pubkey::default(),
+            admin_fee_split_bps: 5000,
+            default_interest_rate_bps: 500,
+            default_admin_fee_bps: 100,
+            total_deposits: 20_000_000_000, // 20 SOL
+            total_loans_outstanding: 10_000_000_000,
+            total_yield_distributed: 0,
+            loan_counter: 2,
+            is_paused: false,
+        };
+
+        // First distribution
+        distribute_yield(&mut config, 100_000_000);
+        assert_eq!(config.total_yield_distributed, 100_000_000);
+
+        // Second distribution
+        distribute_yield(&mut config, 200_000_000);
+        assert_eq!(config.total_yield_distributed, 300_000_000);
+
+        // Third distribution
+        distribute_yield(&mut config, 150_000_000);
+        assert_eq!(config.total_yield_distributed, 450_000_000);
+    }
+
+    #[test]
+    fn test_distribute_yield_large_amount() {
+        let mut config = ProtocolConfig {
+            admin: Pubkey::default(),
+            treasury: Pubkey::default(),
+            deployer: Pubkey::default(),
+            admin_fee_split_bps: 5000,
+            default_interest_rate_bps: 500,
+            default_admin_fee_bps: 100,
+            total_deposits: 100_000_000_000, // 100 SOL
+            total_loans_outstanding: 50_000_000_000,
+            total_yield_distributed: 0,
+            loan_counter: 5,
+            is_paused: false,
+        };
+
+        let yield_amount = 10_000_000_000; // 10 SOL
+        distribute_yield(&mut config, yield_amount);
+        
+        assert_eq!(config.total_yield_distributed, yield_amount);
+    }
+
+    #[test]
+    fn test_distribute_yield_small_deposits_large_yield() {
+        let mut config = ProtocolConfig {
+            admin: Pubkey::default(),
+            treasury: Pubkey::default(),
+            deployer: Pubkey::default(),
+            admin_fee_split_bps: 5000,
+            default_interest_rate_bps: 500,
+            default_admin_fee_bps: 100,
+            total_deposits: 1_000_000, // 0.001 SOL
+            total_loans_outstanding: 0,
+            total_yield_distributed: 0,
+            loan_counter: 0,
+            is_paused: false,
+        };
+
+        let yield_amount = 10_000_000_000; // 10 SOL (yield exceeds deposits)
+        distribute_yield(&mut config, yield_amount);
+        
+        // Should still work, just means high APY
+        assert_eq!(config.total_yield_distributed, yield_amount);
+    }
+
+    // ===== EDGE CASE TESTS =====
+
+    #[test]
+    fn test_calculate_interest_overflow_protection() {
+        // Test with very large values to ensure no overflow
+        let principal = u64::MAX / 100; // Large but safe principal
+        let rate_bps = 100; // 1%
+        let elapsed = 31_536_000; // 1 year
+        
+        // Should not panic
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert!(interest > 0);
+    }
+
+    #[test]
+    fn test_calculate_interest_precision() {
+        // Test that small interest amounts are calculated correctly
+        let principal = 1_000; // Very small amount
+        let rate_bps = 1; // 0.01%
+        let elapsed = 31_536_000; // 1 year
+        
+        // Expected: 1000 * 0.0001 * 1 = 0 (rounds down due to integer math)
+        let interest = calculate_interest(principal, rate_bps, elapsed);
+        assert_eq!(interest, 0);
+    }
+
+    #[test]
+    fn test_loan_state_equality() {
+        assert_eq!(LoanState::Active, LoanState::Active);
+        assert_eq!(LoanState::Repaid, LoanState::Repaid);
+        assert_eq!(LoanState::Recovered, LoanState::Recovered);
+        assert_ne!(LoanState::Active, LoanState::Repaid);
+        assert_ne!(LoanState::Repaid, LoanState::Recovered);
+        assert_ne!(LoanState::Active, LoanState::Recovered);
+    }
+
+    #[test]
+    fn test_protocol_config_size() {
+        // Verify the SIZE constant matches actual struct size requirements
+        assert!(ProtocolConfig::SIZE >= 32 * 3 + 2 * 3 + 8 * 4 + 1);
+    }
+
+    #[test]
+    fn test_depositor_record_size() {
+        // Verify the SIZE constant matches actual struct size requirements
+        assert!(DepositorRecord::SIZE >= 32 + 8 * 3);
+    }
+
+    #[test]
+    fn test_loan_size() {
+        // Verify the SIZE constant matches actual struct size requirements
+        assert!(Loan::SIZE >= 32 * 3 + 8 * 4 + 2 * 2 + 1 + 9 * 5);
+    }
 }

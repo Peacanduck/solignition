@@ -1,7 +1,7 @@
 // src/__tests__/deployer.test.ts
 import { jest } from '@jest/globals';
 import { Keypair, PublicKey, Connection } from '@solana/web3.js';
-import * as anchor from '@project-serum/anchor';
+import * as anchor from '@coral-xyz/anchor';
 import { StateManager, BinaryManager, ProgramDeployer, EventMonitor } from '../index';
 import * as fs from 'fs/promises';
 import * as path from 'path';

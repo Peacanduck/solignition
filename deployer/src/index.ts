@@ -1,5 +1,5 @@
-import * as anchor from '@project-serum/anchor';
-import { Program, Wallet } from '@project-serum/anchor';
+import * as anchor from '@coral-xyz/anchor';
+import { Program, Wallet } from '@coral-xyz/anchor';
 import {
   Connection,
   Keypair,
@@ -12,7 +12,7 @@ import {
   sendAndConfirmTransaction,
   ComputeBudgetProgram,
 } from '@solana/web3.js';
-import { BpfLoader, BPF_LOADER_UPGRADEABLE_PROGRAM_ID } from '@solana/web3.js';
+import { BpfLoader, BPF_LOADER_DEPRECATED_PROGRAM_ID } from '@solana/web3.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { createHash } from 'crypto';
@@ -20,11 +20,11 @@ import winston from 'winston';
 import { EventEmitter } from 'events';
 import express from 'express';
 import { Registry, Gauge, Counter, Histogram } from 'prom-client';
-import dotenv from 'dotenv';
+import * as dotenv from 'dotenv';
 import { Level } from 'level';
 import bs58 from 'bs58';
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 // ============ Configuration ============
 interface DeployerConfig {
@@ -288,7 +288,7 @@ class ProgramDeployer {
 
   async init(): Promise<void> {
     // Load IDL and create program interface
-    const idl = JSON.parse(await fs.readFile('./idl.json', 'utf8'));
+    const idl = JSON.parse(await fs.readFile('../../../projects/solignition/anchor/target/idl/solignition.json', 'utf8'));
     this.program = new Program(idl, config.programId, {
       connection: this.connection,
     });
@@ -333,7 +333,7 @@ class ProgramDeployer {
         newAccountPubkey: bufferKeypair.publicKey,
         lamports: rentExemption,
         space: programAccountSize,
-        programId: BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
+        programId: BPF_LOADER_DEPRECATED_PROGRAM_ID,
       });
 
       // Initialize buffer
@@ -976,7 +976,7 @@ function createInitializeBufferInstruction(
   
   return new TransactionInstruction({
     keys,
-    programId: BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
+    programId: BPF_LOADER_DEPRECATED_PROGRAM_ID,
     data: Buffer.from([0]), // Initialize buffer instruction
   });
 }
@@ -1006,7 +1006,7 @@ function createWriteBufferInstructions(
     instructions.push(
       new TransactionInstruction({
         keys,
-        programId: BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
+        programId: BPF_LOADER_DEPRECATED_PROGRAM_ID,
         data: instructionData,
       })
     );
@@ -1038,7 +1038,7 @@ function createDeployWithMaxDataLenInstruction(
 
   return new TransactionInstruction({
     keys,
-    programId: BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
+    programId: BPF_LOADER_DEPRECATED_PROGRAM_ID,
     data,
   });
 }
@@ -1061,7 +1061,7 @@ function createCloseAccountInstruction(
 
   return new TransactionInstruction({
     keys,
-    programId: BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
+    programId: BPF_LOADER_DEPRECATED_PROGRAM_ID,
     data: Buffer.from([4]), // Close instruction
   });
 }
@@ -1102,23 +1102,44 @@ async function main() {
     await programDeployer.init();
 
     // Load IDL and create program
-    const idl = JSON.parse(await fs.readFile('./idl.json', 'utf8'));
-    const program = new Program(idl, config.programId, { connection });
+    const idl = JSON.parse(await fs.readFile('../../../projects/solignition/anchor/target/idl/solignition.json', 'utf8'));
+    let program; 
+    try {
+       program = new Program(idl, config.programId, { connection });
+    } catch (error) {
+       logger.error('Failed to get program', { error });
+    }
+    
 
-    const eventMonitor = new EventMonitor(connection, program, stateManager);
+    let eventMonitor;
+    try {
+       eventMonitor = new EventMonitor(connection, program, stateManager);
+    } catch (error) {
+       logger.error('Failed to create eventMonitor', { error });
+    }
 
     // Create orchestrator
-    const orchestrator = new DeployerOrchestrator(
+    let orchestrator;
+    try {
+       orchestrator = new DeployerOrchestrator(
       connection,
       stateManager,
       binaryManager,
       programDeployer,
       eventMonitor
     );
+    } catch (error) {
+       logger.error('Failed to create orchestrator ', { error });
+    }
 
     // Start health server
     const healthServer = new HealthServer(stateManager);
     healthServer.start(config.port);
+    try {
+       program = new Program(idl, config.programId, { connection });
+    } catch (error) {
+       logger.error('Failed to get program', { error });
+    }
 
     // Start orchestrator
     await orchestrator.start();
@@ -1141,7 +1162,10 @@ async function main() {
     });
 
   } catch (error) {
-    logger.error('Failed to start deployer service', { error });
+    logger.error('Failed to start deployer service', {
+  message: (error as Error).message,
+  stack: (error as Error).stack,
+});
     process.exit(1);
   }
 }

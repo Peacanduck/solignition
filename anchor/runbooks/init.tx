@@ -1,0 +1,58 @@
+action "initialize_solignition" "svm::invoke_instruction" {
+    description = "Run the initialize method after deployment"
+    depends_on  = ["deploy_solignition"]
+
+    program     = action.deploy_solignition.program_id
+    instruction = "initialize"
+
+    # --------------------------------------------
+    # Arguments (tune these to your config)
+    # --------------------------------------------
+    args = {
+        admin_fee_split_bps        = 500   # 5% of admin fee to depositors
+        default_interest_rate_bps  = 800   # 8% default loan interest
+        default_admin_fee_bps      = 200   # 2% admin fee
+    }
+
+    # --------------------------------------------
+    # Accounts (matching Initialize<'info>)
+    # --------------------------------------------
+    accounts = {
+        admin = signer.authority
+
+        protocol_config = svm::pda(
+            seeds = ["protocol_config"],
+            program = action.deploy_solignition.program_id
+        )
+
+        vault = svm::pda(
+            seeds = ["vault"],
+            program = action.deploy_solignition.program_id
+        )
+
+        authority_pda = svm::pda(
+            seeds = ["authority"],
+            program = action.deploy_solignition.program_id
+        )
+
+        admin_pda = svm::pda(
+            seeds = ["admin"],
+            program = action.deploy_solignition.program_id
+        )
+
+        treasury = svm::pda(
+            seeds = ["treasury"],
+            program = action.deploy_solignition.program_id
+        )
+
+        # This PDA will be recorded as config.deployer
+        deployer = svm::pda(
+            seeds = ["deployer"],
+            program = action.deploy_solignition.program_id
+        )
+
+        system_program = svm::system_program()
+    }
+
+    signers = [signer.authority, signer.payer]
+}

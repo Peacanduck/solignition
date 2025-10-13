@@ -16,4 +16,6 @@ cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "vitest"
+#test = "ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.test.ts"
+testA = "vitest"
+test = "NODE_PATH=/root/projects/solignition/node_modules npx ts-mocha -p ./tsconfig.json -t 1000000 tests/genfunction.test.ts"
