@@ -31,7 +31,7 @@ pub const SECONDS_PER_YEAR: u64 = 31_536_000;
 /// 4. Optionally call `reclaim_program_authority` for audit trail
 
 #[program]
-pub mod sol_lending_protocol {
+pub mod solignition {
     use super::*;
 
     /// Initialize the protocol with admin and configuration
