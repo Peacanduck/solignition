@@ -4,6 +4,7 @@ import { defineConfig } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 import viteTsconfigPaths from 'vite-tsconfig-paths'
 import { resolve } from 'node:path'
+import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -16,6 +17,12 @@ export default defineConfig({
       root: resolve(__dirname),
     }),
   ],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      '@project/anchor': path.resolve(__dirname, './clients/js/src'),
+    },
+  },
   test: {
     globals: true,
   },
