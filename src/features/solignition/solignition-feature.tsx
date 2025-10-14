@@ -6,9 +6,14 @@ import { DepositWithdrawPanel } from './ui/deposit-withdraw-panel'
 import { RequestLoanPanel } from './ui/request-loan-panel'
 import { LoansDisplay } from './ui/loans-display'
 import { ProtocolStats } from './ui/protocol-stats'
+import { AdminPanel } from './ui/admin-panal'
+import { useProtocolConfig } from './data-access/use-protocol-config'
 
 export default function SolignitionFeature() {
-  const { account } = useSolana()
+  const { account } = useSolana();
+  const configQuery = useProtocolConfig();
+  
+  const isAdmin = true;//account && configQuery.data?.data.admin === account.address
 
   return (
     <div className="space-y-8">
@@ -26,10 +31,11 @@ export default function SolignitionFeature() {
           <ProtocolStats />
 
           <Tabs defaultValue="deposit" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'}`}>
               <TabsTrigger value="deposit">Deposit/Withdraw</TabsTrigger>
               <TabsTrigger value="borrow">Borrow</TabsTrigger>
               <TabsTrigger value="loans">My Loans</TabsTrigger>
+              {isAdmin && <TabsTrigger value="admin">Admin</TabsTrigger>}
             </TabsList>
 
             <TabsContent value="deposit" className="space-y-4">
@@ -43,6 +49,12 @@ export default function SolignitionFeature() {
             <TabsContent value="loans" className="space-y-4">
               <LoansDisplay account={account} />
             </TabsContent>
+
+            {isAdmin && (
+              <TabsContent value="admin" className="space-y-4">
+                <AdminPanel account={account} />
+              </TabsContent>
+            )}
           </Tabs>
         </div>
       ) : (
