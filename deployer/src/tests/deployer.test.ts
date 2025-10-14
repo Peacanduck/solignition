@@ -316,8 +316,6 @@ module.exports = {
   },
 };
 
----
-
 // src/__tests__/deployer.integration.test.ts
 import { Connection, Keypair, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import * as anchor from '@project-serum/anchor';
@@ -432,8 +430,6 @@ describe('Deployer Integration Tests', () => {
     // Requires a deployed program and expired loan
   });
 });
-
----
 
 // scripts/test-deployer.ts
 /**

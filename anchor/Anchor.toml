@@ -4,6 +4,7 @@ package_manager = "yarn"
 [features]
 resolution = true
 skip-lint = false
+idl-build = ["anchor-spl/idl-build"]
 
 [programs.localnet]
 solignition = "4dWBvsjopo5Z145Xmse3Lx41G1GKpMyWMLc6p4a52T4N"

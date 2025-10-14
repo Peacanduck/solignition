@@ -18,18 +18,18 @@ action "deploy_solignition" "svm::deploy_program" {
     // instant_surfnet_deployment = true
 }
 
-action "program_call" "svm::process_instructions" {
-    description = "Invoke instructions"
-    instruction {
-        program_idl = variable.program.idl
-        instruction_name = "initialize"
-        instruction_args = [100,500,200 ]
-        payer {
-            public_key = signer.payer.public_key
-        }
-    }
-    signers = [signer.caller]
-}
+//action "program_call" "svm::process_instructions" {
+//    description = "Invoke instructions"
+//    instruction {
+//        program_idl = action.deploy_solignition.idl
+//        instruction_name = "initialize"
+//        instruction_args = [100,500,200 ]
+//        payer {
+//            public_key = signer.payer.public_key
+//        }
+//    }
+//    signers = [signer.caller]
+//}
 
 
 
