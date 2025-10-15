@@ -1,5 +1,5 @@
 import * as anchor from '@coral-xyz/anchor';
-import { Program, Wallet } from '@coral-xyz/anchor';
+import { Program, AnchorProvider, Wallet, EventParser, Idl } from '@coral-xyz/anchor';
 import {
   Connection,
   Keypair,
@@ -8,11 +8,11 @@ import {
   SystemProgram,
   TransactionInstruction,
   LAMPORTS_PER_SOL,
-  Signer,
   sendAndConfirmTransaction,
   ComputeBudgetProgram,
+  ConfirmOptions,
 } from '@solana/web3.js';
-import { BpfLoader, BPF_LOADER_DEPRECATED_PROGRAM_ID } from '@solana/web3.js';
+import { BPF_LOADER_DEPRECATED_PROGRAM_ID } from '@solana/web3.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { createHash } from 'crypto';
@@ -22,9 +22,13 @@ import express from 'express';
 import { Registry, Gauge, Counter, Histogram } from 'prom-client';
 import * as dotenv from 'dotenv';
 import { Level } from 'level';
-import bs58 from 'bs58';
 
-dotenv.config({ path: path.resolve(__dirname, "../.env") });
+// Load environment variables from deployer directory
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+// Import the IDL type - Anchor generates this
+// Adjust the path to match where your IDL is generated
+type SolignitionProgram = Program<Idl>;
 
 // ============ Configuration ============
 interface DeployerConfig {
@@ -32,29 +36,31 @@ interface DeployerConfig {
   wsUrl?: string;
   programId: PublicKey;
   deployerKeypairPath: string;
-  adminKeypairPath?: string; // For set_deployed_program if needed
+  adminKeypairPath?: string;
   binaryStoragePath: string;
   dbPath: string;
+  idlPath: string;
   port: number;
   maxRetries: number;
   retryDelayMs: number;
   pollIntervalMs: number;
-  cluster: 'devnet' | 'testnet' | 'mainnet-beta';
+  cluster: 'devnet' | 'testnet' | 'mainnet-beta' | 'localnet';
 }
 
 const config: DeployerConfig = {
   rpcUrl: process.env.RPC_URL || 'http://127.0.0.1:8899',
   wsUrl: process.env.WS_URL,
   programId: new PublicKey(process.env.PROGRAM_ID || '4dWBvsjopo5Z145Xmse3Lx41G1GKpMyWMLc6p4a52T4N'),
-  deployerKeypairPath: process.env.DEPLOYER_KEYPAIR_PATH || './deployer-keypair.json',
+  deployerKeypairPath: process.env.DEPLOYER_KEYPAIR_PATH || './keys/deployer-keypair.json',
   adminKeypairPath: process.env.ADMIN_KEYPAIR_PATH,
   binaryStoragePath: process.env.BINARY_STORAGE_PATH || './binaries',
   dbPath: process.env.DB_PATH || './deployer-state',
+  idlPath: process.env.IDL_PATH || './idl.json',
   port: parseInt(process.env.PORT || '3000'),
   maxRetries: parseInt(process.env.MAX_RETRIES || '3'),
   retryDelayMs: parseInt(process.env.RETRY_DELAY_MS || '5000'),
   pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS || '30000'),
-  cluster: (process.env.CLUSTER as any) || 'devnet',
+  cluster: (process.env.CLUSTER as any) || 'localnet',
 };
 
 // ============ Constants ============
@@ -231,18 +237,15 @@ class BinaryManager {
   }
 
   async validateBinary(binaryData: Buffer): Promise<{ valid: boolean; reason?: string }> {
-    // Basic validation
     if (binaryData.length === 0) {
       return { valid: false, reason: 'Empty binary' };
     }
 
-    // Check for ELF header (7F 45 4C 46)
     const elfMagic = Buffer.from([0x7f, 0x45, 0x4c, 0x46]);
     if (!binaryData.subarray(0, 4).equals(elfMagic)) {
       return { valid: false, reason: 'Invalid ELF header' };
     }
 
-    // Size limit (100MB)
     if (binaryData.length > 100 * 1024 * 1024) {
       return { valid: false, reason: 'Binary too large (>100MB)' };
     }
@@ -256,9 +259,9 @@ class ProgramDeployer {
   private connection: Connection;
   private deployerWallet: Wallet;
   private adminWallet?: Wallet;
-  private program: Program;
+  private program!: SolignitionProgram;
   private authorityPda: PublicKey;
-  private deployerPda: PublicKey;
+  private deployerPda!: PublicKey;
   private vaultPda: PublicKey;
   private configPda: PublicKey;
 
@@ -269,7 +272,6 @@ class ProgramDeployer {
       this.adminWallet = new Wallet(adminKeypair);
     }
 
-    // Initialize PDAs
     [this.authorityPda] = PublicKey.findProgramAddressSync(
       [AUTHORITY_SEED],
       config.programId
@@ -282,26 +284,39 @@ class ProgramDeployer {
       [PROTOCOL_CONFIG_SEED],
       config.programId
     );
-
-    // We'll set the program once we load the IDL
   }
 
-  async init(): Promise<void> {
-    // Load IDL and create program interface
-    const idl = JSON.parse(await fs.readFile('../../../projects/solignition/anchor/target/idl/solignition.json', 'utf8'));
-    this.program = new Program(idl, config.programId, {
-      connection: this.connection,
-    });
+  async init(idlPath: string): Promise<void> {
+    try {
+      const idlContent = await fs.readFile(idlPath, 'utf8');
+      const idl = JSON.parse(idlContent) as Idl;
+      
+      // Create provider for Anchor 0.31.1
+      const opts: ConfirmOptions = {
+        preflightCommitment: 'confirmed',
+        commitment: 'confirmed',
+      };
+      
+      const provider = new AnchorProvider(
+        this.connection,
+        this.deployerWallet,
+        opts
+      );
+      
+      this.program = new Program(idl, provider);
 
-    // Get deployer PDA from config
-    const protocolConfig = await this.program.account.protocolConfig.fetch(this.configPda);
-    this.deployerPda = protocolConfig.deployer;
+      const protocolConfig = await this.program.account['protocolConfig'].fetch(this.configPda);
+      this.deployerPda = (protocolConfig as any).deployer as PublicKey;
 
-    logger.info('Program deployer initialized', {
-      authorityPda: this.authorityPda.toBase58(),
-      deployerPda: this.deployerPda.toBase58(),
-      vaultPda: this.vaultPda.toBase58(),
-    });
+      logger.info('Program deployer initialized', {
+        authorityPda: this.authorityPda.toBase58(),
+        deployerPda: this.deployerPda.toBase58(),
+        vaultPda: this.vaultPda.toBase58(),
+      });
+    } catch (error) {
+      logger.error('Failed to initialize program deployer', { error });
+      throw error;
+    }
   }
 
   async deployProgram(
@@ -313,21 +328,17 @@ class ProgramDeployer {
     try {
       logger.info(`Starting deployment for loan ${loanId}`);
 
-      // Check deployer PDA balance
       const deployerBalance = await this.connection.getBalance(this.deployerPda);
       logger.info(`Deployer PDA balance: ${deployerBalance / LAMPORTS_PER_SOL} SOL`);
 
-      // Create buffer account and upload program
       const bufferKeypair = Keypair.generate();
       const programId = Keypair.generate();
 
-      // Calculate required lamports for rent exemption
-      const programAccountSize = binaryData.length + 1000; // Add buffer for metadata
+      const programAccountSize = binaryData.length + 1000;
       const rentExemption = await this.connection.getMinimumBalanceForRentExemption(
         programAccountSize
       );
 
-      // Create buffer account
       const createBufferIx = SystemProgram.createAccount({
         fromPubkey: this.deployerWallet.publicKey,
         newAccountPubkey: bufferKeypair.publicKey,
@@ -336,30 +347,26 @@ class ProgramDeployer {
         programId: BPF_LOADER_DEPRECATED_PROGRAM_ID,
       });
 
-      // Initialize buffer
       const initBufferIx = createInitializeBufferInstruction(
         bufferKeypair.publicKey,
         this.deployerWallet.publicKey
       );
 
-      // Write program data to buffer
       const writeInstructions = createWriteBufferInstructions(
         bufferKeypair.publicKey,
         this.deployerWallet.publicKey,
         binaryData
       );
 
-      // Deploy program with authority set to protocol PDA
       const deployIx = createDeployWithMaxDataLenInstruction(
         this.deployerWallet.publicKey,
         programId.publicKey,
         bufferKeypair.publicKey,
-        this.authorityPda, // Set authority to protocol PDA
+        this.authorityPda,
         rentExemption,
         binaryData.length
       );
 
-      // Build and send transaction
       const tx = new Transaction();
       tx.add(
         ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
@@ -398,10 +405,7 @@ class ProgramDeployer {
     }
   }
 
-  async setDeployedProgram(
-    loanId: string,
-    programPubkey: PublicKey
-  ): Promise<string> {
+  async setDeployedProgram(loanId: string, programPubkey: PublicKey): Promise<string> {
     if (!this.adminWallet) {
       throw new Error('Admin wallet not configured for set_deployed_program');
     }
@@ -433,20 +437,17 @@ class ProgramDeployer {
     try {
       logger.info(`Closing program for loan ${loanId}`, { programId: programId.toBase58() });
 
-      // Get program data account
       const programAccountInfo = await this.connection.getAccountInfo(programId);
       if (!programAccountInfo) {
         throw new Error('Program account not found');
       }
 
-      // Parse program data to get the data account
       const programDataAddress = new PublicKey(programAccountInfo.data.slice(4, 36));
 
-      // Close the program data account
       const closeIx = createCloseAccountInstruction(
         programDataAddress,
-        this.deployerPda, // Recipient of reclaimed SOL
-        this.authorityPda, // Authority
+        this.deployerPda,
+        this.authorityPda,
         programId
       );
 
@@ -458,7 +459,6 @@ class ProgramDeployer {
         { commitment: 'confirmed' }
       );
 
-      // Check reclaimed balance
       const afterBalance = await this.connection.getBalance(this.deployerPda);
 
       logger.info('Program closed successfully', {
@@ -504,28 +504,32 @@ class ProgramDeployer {
 
   async getLoanAccount(loanId: string): Promise<any> {
     const loanPda = this.getLoanPda(loanId);
-    return await this.program.account.loan.fetch(loanPda);
+    return await this.program.account['loan'].fetch(loanPda);
   }
 
   private getLoanPda(loanId: string): PublicKey {
     const loanIdBn = new anchor.BN(loanId);
     const [loanPda] = PublicKey.findProgramAddressSync(
       [LOAN_SEED, loanIdBn.toArrayLike(Buffer, 'le', 8)],
-      config.programId
+      this.program.programId
     );
     return loanPda;
+  }
+
+  getProgram(): SolignitionProgram {
+    return this.program;
   }
 }
 
 // ============ Event Monitor ============
 class EventMonitor extends EventEmitter {
   private connection: Connection;
-  private program: Program;
+  private program: SolignitionProgram;
   private subscriptionId?: number;
   private stateManager: StateManager;
   private isRunning: boolean = false;
 
-  constructor(connection: Connection, program: Program, stateManager: StateManager) {
+  constructor(connection: Connection, program: SolignitionProgram, stateManager: StateManager) {
     super();
     this.connection = connection;
     this.program = program;
@@ -538,7 +542,6 @@ class EventMonitor extends EventEmitter {
 
     logger.info('Starting event monitor');
 
-    // Subscribe to program logs
     this.subscriptionId = this.connection.onLogs(
       config.programId,
       async (logs) => {
@@ -551,7 +554,6 @@ class EventMonitor extends EventEmitter {
       'confirmed'
     );
 
-    // Also poll for missed events periodically
     this.startPolling();
   }
 
@@ -565,7 +567,6 @@ class EventMonitor extends EventEmitter {
   private async processLogs(logs: any): Promise<void> {
     const { signature, logs: logMessages } = logs;
 
-    // Parse Anchor events from logs
     for (const log of logMessages) {
       if (log.includes('Program log: LoanRequested')) {
         await this.handleLoanRequested(signature);
@@ -577,29 +578,34 @@ class EventMonitor extends EventEmitter {
 
   private async handleLoanRequested(signature: string): Promise<void> {
     try {
-      // Get transaction details
       const tx = await this.connection.getParsedTransaction(signature, {
         commitment: 'confirmed',
+        maxSupportedTransactionVersion: 0,
       });
 
-      if (!tx) return;
+      if (!tx || !tx.meta) return;
 
-      // Parse event data from transaction logs
-      const parser = new anchor.EventParser(config.programId, this.program.coder);
-      const events = parser.parseLogs(tx.meta?.logMessages || []);
-
-      for (const event of events) {
-        if (event.name === 'LoanRequested') {
-          const data = event.data as LoanRequestedEvent;
-          this.emit('loanRequested', {
-            loanId: data.loanId.toString(),
-            borrower: data.borrower.toBase58(),
-            principal: data.principal.toString(),
-            duration: data.duration.toString(),
-            interestRateBps: data.interestRateBps,
-            adminFee: data.adminFee.toString(),
-          });
+      // For Anchor 0.31.1, parse events from logs
+      const eventParser = new EventParser(config.programId, this.program.coder);
+      
+      try {
+        const events = eventParser.parseLogs(tx.meta.logMessages || []);
+        
+        for (const event of events) {
+          if (event.name === 'LoanRequested') {
+            const data = event.data as LoanRequestedEvent;
+            this.emit('loanRequested', {
+              loanId: data.loanId.toString(),
+              borrower: data.borrower.toBase58(),
+              principal: data.principal.toString(),
+              duration: data.duration.toString(),
+              interestRateBps: data.interestRateBps,
+              adminFee: data.adminFee.toString(),
+            });
+          }
         }
+      } catch (parseError) {
+        logger.debug('No events found in transaction logs', { signature });
       }
     } catch (error) {
       logger.error('Error handling loan requested event', { signature, error });
@@ -610,20 +616,26 @@ class EventMonitor extends EventEmitter {
     try {
       const tx = await this.connection.getParsedTransaction(signature, {
         commitment: 'confirmed',
+        maxSupportedTransactionVersion: 0,
       });
 
-      if (!tx) return;
+      if (!tx || !tx.meta) return;
 
-      const parser = new anchor.EventParser(config.programId, this.program.coder);
-      const events = parser.parseLogs(tx.meta?.logMessages || []);
+      const eventParser = new EventParser(config.programId, this.program.coder);
+      
+      try {
+        const events = eventParser.parseLogs(tx.meta.logMessages || []);
 
-      for (const event of events) {
-        if (event.name === 'LoanRecovered') {
-          const data = event.data as LoanRecoveredEvent;
-          this.emit('loanRecovered', {
-            loanId: data.loanId.toString(),
-          });
+        for (const event of events) {
+          if (event.name === 'LoanRecovered') {
+            const data = event.data as LoanRecoveredEvent;
+            this.emit('loanRecovered', {
+              loanId: data.loanId.toString(),
+            });
+          }
         }
+      } catch (parseError) {
+        logger.debug('No events found in transaction logs', { signature });
       }
     } catch (error) {
       logger.error('Error handling loan recovered event', { signature, error });
@@ -643,20 +655,19 @@ class EventMonitor extends EventEmitter {
   }
 
   private async checkExpiredLoans(): Promise<void> {
-    // Get all active deployments from state
     const deployments = await this.stateManager.getAllDeployments();
     const activeLoans = deployments.filter(d => d.status === 'deployed');
 
     for (const deployment of activeLoans) {
       try {
-        const loan = await this.program.account.loan.fetch(
+        const loan = await this.program.account['loan'].fetch(
           this.getLoanPda(deployment.loanId)
         );
 
         const now = Date.now() / 1000;
-        const expiry = loan.startTs.toNumber() + loan.duration.toNumber();
+        const expiry = (loan as any).startTs.toNumber() + (loan as any).duration.toNumber();
 
-        if (now >= expiry && loan.state === LoanState.Active) {
+        if (now >= expiry && (loan as any).state === LoanState.Active) {
           logger.info(`Loan ${deployment.loanId} has expired`);
           this.emit('loanExpired', { loanId: deployment.loanId });
         }
@@ -672,7 +683,7 @@ class EventMonitor extends EventEmitter {
     const loanIdBn = new anchor.BN(loanId);
     const [loanPda] = PublicKey.findProgramAddressSync(
       [LOAN_SEED, loanIdBn.toArrayLike(Buffer, 'le', 8)],
-      config.programId
+      this.program.programId
     );
     return loanPda;
   }
@@ -721,14 +732,12 @@ class DeployerOrchestrator {
 
     logger.info('Processing loan requested event', { loanId, borrower, principal });
 
-    // Check idempotency
     let deployment = await this.stateManager.getDeployment(loanId);
     if (deployment && deployment.status !== 'failed') {
       logger.info(`Loan ${loanId} already being processed`, { status: deployment.status });
       return;
     }
 
-    // Create deployment record
     deployment = {
       loanId,
       borrower,
@@ -739,7 +748,6 @@ class DeployerOrchestrator {
     };
     await this.stateManager.saveDeployment(deployment);
 
-    // Process deployment with retries
     await this.processDeploymentWithRetries(deployment);
   }
 
@@ -765,7 +773,6 @@ class DeployerOrchestrator {
           return;
         }
 
-        // Exponential backoff
         await new Promise(resolve => 
           setTimeout(resolve, config.retryDelayMs * Math.pow(2, attempts - 1))
         );
@@ -776,30 +783,20 @@ class DeployerOrchestrator {
   private async processDeployment(deployment: DeploymentRecord): Promise<void> {
     const { loanId, borrower } = deployment;
 
-    // Update status
     deployment.status = 'deploying';
     deployment.updatedAt = Date.now();
     await this.stateManager.saveDeployment(deployment);
 
-    // Fetch binary for deployment
-    // NOTE: In production, you need to implement binary retrieval
-    // Options:
-    // 1. IPFS hash stored in loan metadata
-    // 2. Pre-uploaded to binary storage with borrower signature
-    // 3. Direct upload endpoint with authentication
     const binaryData = await this.fetchBinaryForLoan(loanId, borrower);
 
-    // Validate binary
     const validation = await this.binaryManager.validateBinary(binaryData);
     if (!validation.valid) {
       throw new Error(`Binary validation failed: ${validation.reason}`);
     }
 
-    // Store binary
     const binaryHash = await this.binaryManager.storeBinary(loanId, binaryData);
     deployment.binaryHash = binaryHash;
 
-    // Deploy program
     const { programId, bufferAccount, signature } = await this.programDeployer.deployProgram(
       loanId,
       binaryData
@@ -809,11 +806,9 @@ class DeployerOrchestrator {
     deployment.bufferAccount = bufferAccount.toBase58();
     deployment.deployTxSignature = signature;
 
-    // Set deployed program on-chain
     const setTx = await this.programDeployer.setDeployedProgram(loanId, programId);
     deployment.setDeployedTxSignature = setTx;
 
-    // Update status
     deployment.status = 'deployed';
     deployment.updatedAt = Date.now();
     await this.stateManager.saveDeployment(deployment);
@@ -849,13 +844,11 @@ class DeployerOrchestrator {
       await this.stateManager.saveDeployment(deployment);
 
       if (deployment.programId) {
-        // Close the program and reclaim SOL
         const { reclaimedSol, signature } = await this.programDeployer.closeProgram(
           loanId,
           new PublicKey(deployment.programId)
         );
 
-        // Return reclaimed SOL to vault
         const returnTx = await this.programDeployer.returnReclaimedSol(
           loanId,
           reclaimedSol
@@ -881,13 +874,6 @@ class DeployerOrchestrator {
   }
 
   private async fetchBinaryForLoan(loanId: string, borrower: string): Promise<Buffer> {
-    // TODO: Implement binary retrieval logic
-    // This is a placeholder - in production, you need to:
-    // 1. Fetch from IPFS if hash is provided
-    // 2. Check pre-uploaded binaries with borrower signature
-    // 3. Implement secure upload mechanism
-
-    // For now, return a dummy binary for testing
     const dummyBinaryPath = path.join(config.binaryStoragePath, 'test-program.so');
     try {
       return await fs.readFile(dummyBinaryPath);
@@ -919,7 +905,6 @@ class HealthServer {
   }
 
   private setupRoutes(): void {
-    // Health endpoint
     this.app.get('/health', async (req, res) => {
       try {
         const deployments = await this.stateManager.getAllDeployments();
@@ -936,13 +921,11 @@ class HealthServer {
       }
     });
 
-    // Metrics endpoint
     this.app.get('/metrics', async (req, res) => {
       res.set('Content-Type', registry.contentType);
       res.end(await registry.metrics());
     });
 
-    // Deployment status endpoint
     this.app.get('/deployments/:loanId', async (req, res) => {
       try {
         const deployment = await this.stateManager.getDeployment(req.params.loanId);
@@ -964,7 +947,6 @@ class HealthServer {
 }
 
 // ============ Helper Functions ============
-
 function createInitializeBufferInstruction(
   buffer: PublicKey,
   authority: PublicKey
@@ -977,7 +959,7 @@ function createInitializeBufferInstruction(
   return new TransactionInstruction({
     keys,
     programId: BPF_LOADER_DEPRECATED_PROGRAM_ID,
-    data: Buffer.from([0]), // Initialize buffer instruction
+    data: Buffer.from([0]),
   });
 }
 
@@ -987,7 +969,7 @@ function createWriteBufferInstructions(
   data: Buffer
 ): TransactionInstruction[] {
   const instructions: TransactionInstruction[] = [];
-  const chunkSize = 900; // Safe chunk size for transaction
+  const chunkSize = 900;
 
   for (let offset = 0; offset < data.length; offset += chunkSize) {
     const chunk = data.slice(offset, Math.min(offset + chunkSize, data.length));
@@ -998,7 +980,7 @@ function createWriteBufferInstructions(
     ];
 
     const instructionData = Buffer.concat([
-      Buffer.from([1]), // Write instruction
+      Buffer.from([1]),
       Buffer.from(new Uint32Array([offset]).buffer),
       chunk,
     ]);
@@ -1032,7 +1014,7 @@ function createDeployWithMaxDataLenInstruction(
   ];
 
   const data = Buffer.concat([
-    Buffer.from([2]), // Deploy with max data len instruction
+    Buffer.from([2]),
     Buffer.from(new Uint32Array([dataLen]).buffer),
   ]);
 
@@ -1062,34 +1044,74 @@ function createCloseAccountInstruction(
   return new TransactionInstruction({
     keys,
     programId: BPF_LOADER_DEPRECATED_PROGRAM_ID,
-    data: Buffer.from([4]), // Close instruction
+    data: Buffer.from([4]),
   });
 }
 
 // ============ Main Application ============
 async function main() {
-  logger.info('Starting Solana Lending Protocol Deployer Service', { config });
+  logger.info('Starting Solana Lending Protocol Deployer Service', { 
+    config: {
+      ...config,
+      programId: config.programId.toBase58()
+    } 
+  });
 
   try {
+    // Validate configuration
+    logger.info('Validating configuration...');
+    
+    // Check if keypair files exist
+    try {
+      await fs.access(config.deployerKeypairPath);
+      logger.info(`Deployer keypair found: ${config.deployerKeypairPath}`);
+    } catch {
+      throw new Error(`Deployer keypair not found at: ${config.deployerKeypairPath}`);
+    }
+
+    // Check if IDL file exists
+    try {
+      await fs.access(config.idlPath);
+      logger.info(`IDL file found: ${config.idlPath}`);
+    } catch {
+      throw new Error(`IDL file not found at: ${config.idlPath}`);
+    }
+
     // Initialize connection
     const connection = new Connection(config.rpcUrl, {
       commitment: 'confirmed',
       wsEndpoint: config.wsUrl,
     });
 
+    // Test connection
+    logger.info('Testing connection to Solana RPC...');
+    const version = await connection.getVersion();
+    logger.info('Connected to Solana', { version });
+
     // Load keypairs
+    logger.info('Loading keypairs...');
+    const deployerKeypairData = await fs.readFile(config.deployerKeypairPath, 'utf8');
     const deployerKeypair = Keypair.fromSecretKey(
-      new Uint8Array(JSON.parse(await fs.readFile(config.deployerKeypairPath, 'utf8')))
+      new Uint8Array(JSON.parse(deployerKeypairData))
     );
+    logger.info(`Deployer public key: ${deployerKeypair.publicKey.toBase58()}`);
     
     let adminKeypair: Keypair | undefined;
     if (config.adminKeypairPath) {
-      adminKeypair = Keypair.fromSecretKey(
-        new Uint8Array(JSON.parse(await fs.readFile(config.adminKeypairPath, 'utf8')))
-      );
+      try {
+        await fs.access(config.adminKeypairPath);
+        const adminKeypairData = await fs.readFile(config.adminKeypairPath, 'utf8');
+        adminKeypair = Keypair.fromSecretKey(
+          new Uint8Array(JSON.parse(adminKeypairData))
+        );
+        logger.info(`Admin public key: ${adminKeypair.publicKey.toBase58()}`);
+      } catch (error) {
+        logger.warn('Admin keypair not found, some operations may fail', { error });
+      }
     }
 
     // Initialize components
+    logger.info('Initializing components...');
     const stateManager = new StateManager(config.dbPath);
     const binaryManager = new BinaryManager(config.binaryStoragePath);
     await binaryManager.init();
@@ -1099,47 +1121,22 @@ async function main() {
       deployerKeypair,
       adminKeypair
     );
-    await programDeployer.init();
+    await programDeployer.init(config.idlPath);
 
-    // Load IDL and create program
-    const idl = JSON.parse(await fs.readFile('../../../projects/solignition/anchor/target/idl/solignition.json', 'utf8'));
-    let program; 
-    try {
-       program = new Program(idl, config.programId, { connection });
-    } catch (error) {
-       logger.error('Failed to get program', { error });
-    }
-    
+    const program = programDeployer.getProgram();
+    const eventMonitor = new EventMonitor(connection, program, stateManager);
 
-    let eventMonitor;
-    try {
-       eventMonitor = new EventMonitor(connection, program, stateManager);
-    } catch (error) {
-       logger.error('Failed to create eventMonitor', { error });
-    }
-
-    // Create orchestrator
-    let orchestrator;
-    try {
-       orchestrator = new DeployerOrchestrator(
+    const orchestrator = new DeployerOrchestrator(
       connection,
       stateManager,
       binaryManager,
       programDeployer,
       eventMonitor
     );
-    } catch (error) {
-       logger.error('Failed to create orchestrator ', { error });
-    }
 
     // Start health server
     const healthServer = new HealthServer(stateManager);
     healthServer.start(config.port);
-    try {
-       program = new Program(idl, config.programId, { connection });
-    } catch (error) {
-       logger.error('Failed to get program', { error });
-    }
 
     // Start orchestrator
     await orchestrator.start();
@@ -1147,25 +1144,21 @@ async function main() {
     logger.info('Deployer service started successfully');
 
     // Handle graceful shutdown
-    process.on('SIGINT', async () => {
+    const shutdown = async () => {
       logger.info('Shutting down gracefully...');
       await orchestrator.stop();
       await stateManager.close();
       process.exit(0);
-    });
+    };
 
-    process.on('SIGTERM', async () => {
-      logger.info('Shutting down gracefully...');
-      await orchestrator.stop();
-      await stateManager.close();
-      process.exit(0);
-    });
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
 
   } catch (error) {
     logger.error('Failed to start deployer service', {
-  message: (error as Error).message,
-  stack: (error as Error).stack,
-});
+      message: (error as Error).message,
+      stack: (error as Error).stack,
+    });
     process.exit(1);
   }
 }

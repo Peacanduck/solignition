@@ -3,6 +3,10 @@ import { Program } from '@coral-xyz/anchor';
 import { Solignition } from "../target/types/solignition";
 import { PublicKey, SystemProgram, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { assert, expect } from "chai";
+import { createKeyPairFromBytes, createSignerFromKeyPair, getBase58Encoder } from 'gill';
+import { loadKeypairSignerFromFile, type KeyPairSigner } from 'gill/node';
+import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes';
+import * as fs from 'fs';
 
 describe("solignition", () => {
   // Configure the client to use the local cluster
@@ -39,13 +43,28 @@ describe("solignition", () => {
   const PROTOCOL_CONFIG_SEED = Buffer.from("config");
 
   before(async () => {
+    //test public keypair seed don't use on mainnet
+    const keypairBase58 ="5MaiiCavjCmn9Hs1o3eznqDEhRwxo7pXiAYez7keQUviUkauRiTMD8DrESdrNjN8zd9mTmVhRvBJeg5vhyvgrAhG";
+
+   //const keypair = await createKeyPairFromBytes( getBase58Encoder().encode(keypairBase58));
+   // const signer = await createSignerFromKeyPair(keypair);
+    //const signer = await loadKeypairSignerFromFile();
+    const keypairBytes = bs58.decode(keypairBase58);
+    const keypair = Keypair.fromSecretKey(keypairBytes);
+    console.log("address:", keypair);
+    const decoded = bs58.decode(keypairBase58);
+    const keyArray = Array.from(decoded);
+    const outputPath = '/root/projects/testkeys/key.json';
+     fs.writeFileSync(outputPath, JSON.stringify(keyArray));
+
+
     // Generate keypairs
-    admin = Keypair.generate();
+    admin = keypair;
     depositor1 = Keypair.generate();
     depositor2 = Keypair.generate();
     depositor3 = Keypair.generate();
     borrower = Keypair.generate();
-    deployer = Keypair.generate();
+    deployer = keypair;
 
     // Airdrop SOL to test accounts
     const airdropAmount = 100 * LAMPORTS_PER_SOL;
