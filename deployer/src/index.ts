@@ -990,7 +990,7 @@ class DeployerOrchestrator {
   private stateManager: StateManager;
   private binaryManager: BinaryManager;
   private solanaDeployer: SolanaCliDeployer;
-  private graphqlMonitor: GraphQLMonitor;
+ // private graphqlMonitor: GraphQLMonitor;
   private connection: Connection;
   private program: Program<Idl>;
   private deployerWallet: Wallet;
@@ -1001,7 +1001,7 @@ class DeployerOrchestrator {
     stateManager: StateManager,
     binaryManager: BinaryManager,
     solanaDeployer: SolanaCliDeployer,
-    graphqlMonitor: GraphQLMonitor,
+    //graphqlMonitor: GraphQLMonitor,
     program: Program<Idl>,
     deployerWallet: Wallet
   ) {
@@ -1009,13 +1009,13 @@ class DeployerOrchestrator {
     this.stateManager = stateManager;
     this.binaryManager = binaryManager;
     this.solanaDeployer = solanaDeployer;
-    this.graphqlMonitor = graphqlMonitor;
+    //this.graphqlMonitor = graphqlMonitor;
     this.program = program ;
     this.deployerWallet = deployerWallet;
 
-    this.setupEventHandlers();
+   // this.setupEventHandlers();
   }
-
+/** 
   private setupEventHandlers(): void {
     this.graphqlMonitor.on('loanRequested', async (event) => {
       await this.handleLoanRequested(event);
@@ -1024,7 +1024,7 @@ class DeployerOrchestrator {
     this.graphqlMonitor.on('loanRecovered', async (event) => {
       await this.handleLoanRecovered(event);
     });
-  }
+  }*/
 
   private startExpiredLoanChecker(): void {
   const CHECK_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
@@ -1683,13 +1683,13 @@ private async callReturnReclaimedSol(
   }
 
   async start(): Promise<void> {
-    await this.graphqlMonitor.start();
+   // await this.graphqlMonitor.start();
     this.startExpiredLoanChecker();
     logger.info('Deployer orchestrator started');
   }
 
   async stop(): Promise<void> {
-    await this.graphqlMonitor.stop();
+   // await this.graphqlMonitor.stop();
 
     if (this.expiredLoanInterval) {
     clearInterval(this.expiredLoanInterval);
@@ -2416,18 +2416,14 @@ async function main() {
 
     
 
-    const graphqlMonitor = new GraphQLMonitor(
-      config.graphqlEndpoint,
-      stateManager,
-      logger
-    );
+    //const graphqlMonitor = new GraphQLMonitor(config.graphqlEndpoint,stateManager,logger);
 
     const orchestrator = new DeployerOrchestrator(
       connection,
       stateManager,
       binaryManager,
       solanaDeployer,
-      graphqlMonitor,
+     // graphqlMonitor,
       program,
       deployerWallet
     );
@@ -2447,13 +2443,13 @@ async function main() {
     logger.info(`  - GET http://localhost:${config.port}/health - Health check`);
     logger.info(`  - GET http://localhost:${config.port}/metrics - Prometheus metrics`);
 
-    // Test GraphQL connection
+    /*/ Test GraphQL connection 
     try {
       const protocolConfig = await graphqlMonitor.getProtocolConfig();
       logger.info('GraphQL connection successful', { protocolConfig });
     } catch (error) {
       logger.warn('Could not fetch protocol config from GraphQL', { error });
-    }
+    }*/
 
     // Handle graceful shutdown
     const shutdown = async () => {
@@ -2486,7 +2482,7 @@ if (require.main === module) {
 export {
   DeployerOrchestrator,
   SolanaCliDeployer,
-  GraphQLMonitor,
+ // GraphQLMonitor,
   StateManager,
   BinaryManager,
   ApiServer,

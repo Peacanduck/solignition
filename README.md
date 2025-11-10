@@ -151,14 +151,14 @@ Update the cluster in the web interface to connect to devnet.
 ## Project Structure
 
 ```
-solignition/
+solignition/                     # Root contains vite app frontend
 ├── anchor/                      # Solana program
 │   ├── programs/solignition/    # Anchor program source
 │   ├── src/                     # TypeScript client and helpers
 │   │   ├── client/js/generated/ # Codama-generated client
 │   │   └── solignition-exports.ts
 │   └── tests/                   # Program tests
-├── deployer/                    # Deployment automation service
+├── deployer/                    # Deployment automation express service
 │   ├── src/                     # Deployer source code
 │   └── binaries/                # Cached program binaries
 ├── src/                         # Web interface
@@ -168,7 +168,9 @@ solignition/
 │   └── features/                # Feature-specific components
 │       ├── protocol/            # Protocol interaction UI
 │       └── account/             # Account management
-└── clients/js/                  # main client used
+├── clients/js/                  # main client used
+├── landing/                     # website vite landing page
+
 ```
 
 ## Key Concepts
