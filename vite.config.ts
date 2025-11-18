@@ -26,4 +26,13 @@ export default defineConfig({
   test: {
     globals: true,
   },
+  server: {
+    port: 5173,
+    allowedHosts: [
+      'localhost',
+      '127.0.0.1',
+      'anita-radiophonic-gametically.ngrok-free.dev', // ngrok tunnel domain for server
+      'solignition.ngrok.app', // ngrok tunnel domain for frontend
+    ],
+  },
 })
