@@ -184,15 +184,25 @@ interest = (principal × rate_bps × elapsed_seconds) / (10,000 × SECONDS_PER_Y
 - Time-based accrual: Interest accumulates proportionally to loan duration
 
 ### Yield Distribution
+Loan requested:
+- Open fee spilt between admin_pda and associated vault treasury
+- updates associated share value
+
 When loans are repaid:
-1. Admin fee is deducted (configured in protocol)
-2. Remaining yield is distributed proportionally to all depositors
-3. Each depositor's share = (their deposit / total deposits) × yield
+- interest is split into admin_pda and associated vault treasury
+- updates associated share value
+
+**Share Value**
+- $TotalAssets = TotalDeposits + AccruedInterest$
+- $Share Price = TotalAssets / TotalShares$
+- $WithdrawableAssets = UserShares * SharePrice
 
 ### Loan States
 - **Active**: Loan is outstanding, interest is accruing
 - **Repaid**: Borrower has fully repaid the loan with interest
 - **Recovered**: Admin has recovered the loan (borrower failed to repay)
+- **Pending**: loan has been requested and program pending deployment
+- **RepaidPendingTransfer**: loan has been repaid program pending authority transfer
 
 ## Configuration
 
@@ -207,9 +217,9 @@ Protocol parameters (set during initialization or via `update_config`):
 ⚠️ **This is experimental software. Use at your own risk.**
 
 - Protocol admin has privileged access (recovery, configuration)
-- Loans are not collateralized - borrowers can default
+- Loans are collateralized by the smart contract itself
 - No slashing mechanism for failed deployments
-- Audit recommended before mainnet deployment
+
 
 ## Development Tools
 
@@ -235,6 +245,6 @@ This project uses:
 
 - Issues: [GitHub Issues](repo-url/issues)
 - Discussions: [GitHub Discussions](repo-url/discussions)
-- Discord: [Discord Link]
+- Discord:[Discord Link](https://discord.gg/7yBEb7GUee)
 
 ---

@@ -35,6 +35,8 @@ dist-ssr
 /anchor/target/sbf-solana-solana
 /anchor/target/test-ledger
 /anchor/target/.rustc_info.json
+/anchor/.surfpool
+sqlite
 test-ledger
 **/*.rs.bk
 
