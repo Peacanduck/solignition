@@ -23,20 +23,20 @@ import {
 export type Deposited = {
   depositor: Address;
   amount: bigint;
-  totalDeposits: bigint;
+  totalShares: bigint;
 };
 
 export type DepositedArgs = {
   depositor: Address;
   amount: number | bigint;
-  totalDeposits: number | bigint;
+  totalShares: number | bigint;
 };
 
 export function getDepositedEncoder(): FixedSizeEncoder<DepositedArgs> {
   return getStructEncoder([
     ['depositor', getAddressEncoder()],
     ['amount', getU64Encoder()],
-    ['totalDeposits', getU64Encoder()],
+    ['totalShares', getU64Encoder()],
   ]);
 }
 
@@ -44,7 +44,7 @@ export function getDepositedDecoder(): FixedSizeDecoder<Deposited> {
   return getStructDecoder([
     ['depositor', getAddressDecoder()],
     ['amount', getU64Decoder()],
-    ['totalDeposits', getU64Decoder()],
+    ['totalShares', getU64Decoder()],
   ]);
 }
 

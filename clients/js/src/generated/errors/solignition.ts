@@ -50,6 +50,10 @@ export const SOLIGNITION_ERROR__INVALID_LOAN_ID = 0x177f; // 6015
 export const SOLIGNITION_ERROR__PROGRAM_ALREADY_SET = 0x1780; // 6016
 /** InvalidProgram: Invalid program pubkey */
 export const SOLIGNITION_ERROR__INVALID_PROGRAM = 0x1781; // 6017
+/** MathOverflow: Error in calculations */
+export const SOLIGNITION_ERROR__MATH_OVERFLOW = 0x1782; // 6018
+/** NoYieldToClaim: No yield to claim */
+export const SOLIGNITION_ERROR__NO_YIELD_TO_CLAIM = 0x1783; // 6019
 
 export type SolignitionError =
   | typeof SOLIGNITION_ERROR__INSUFFICIENT_BALANCE
@@ -65,6 +69,8 @@ export type SolignitionError =
   | typeof SOLIGNITION_ERROR__LOAN_NOT_EXPIRED
   | typeof SOLIGNITION_ERROR__LOAN_NOT_RECOVERED
   | typeof SOLIGNITION_ERROR__LOAN_NOT_REPAID
+  | typeof SOLIGNITION_ERROR__MATH_OVERFLOW
+  | typeof SOLIGNITION_ERROR__NO_YIELD_TO_CLAIM
   | typeof SOLIGNITION_ERROR__PROGRAM_ALREADY_SET
   | typeof SOLIGNITION_ERROR__PROTOCOL_PAUSED
   | typeof SOLIGNITION_ERROR__UNAUTHORIZED
@@ -87,6 +93,8 @@ if (process.env.NODE_ENV !== 'production') {
     [SOLIGNITION_ERROR__LOAN_NOT_EXPIRED]: `Loan has not expired yet`,
     [SOLIGNITION_ERROR__LOAN_NOT_RECOVERED]: `Loan has not been recovered`,
     [SOLIGNITION_ERROR__LOAN_NOT_REPAID]: `Loan has not been repaid`,
+    [SOLIGNITION_ERROR__MATH_OVERFLOW]: `Error in calculations`,
+    [SOLIGNITION_ERROR__NO_YIELD_TO_CLAIM]: `No yield to claim`,
     [SOLIGNITION_ERROR__PROGRAM_ALREADY_SET]: `Program already set for this loan`,
     [SOLIGNITION_ERROR__PROTOCOL_PAUSED]: `Protocol is currently paused`,
     [SOLIGNITION_ERROR__UNAUTHORIZED]: `Unauthorized action`,

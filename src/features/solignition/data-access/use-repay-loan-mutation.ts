@@ -28,11 +28,6 @@ export function useRepayLoanMutation({ account }: { account: UiWalletAccount }) 
   const signAndSend = useWalletUiSignAndSend()
   const protocolConfigQuery = useProtocolConfig()
   
-
-
-
-  
-
   return useMutation({
     mutationFn: async ({ loanAddress, programData, loanId }: { loanAddress: Address; programData: Address, loanId: BigInt }) => {
       
@@ -79,9 +74,7 @@ console.log('  Program Data:', programDataInfo !== null)
 
 // 2. Fetch and decode the protocol config to get loan_counter
 if (protocolConfigInfo) {
-  // You'll need to decode this properly, but let's check the data
   console.log('Protocol Config data length:', protocolConfigInfo.data.length)
-  // The loan_counter should be in the account data - you need to decode it properly
 }
 
       console.log('Protocol Config:', protocolConfig)
@@ -104,8 +97,14 @@ if (protocolConfigInfo) {
       
         signature = await signAndSend(instruction, signer);
 
+
+
+
+
+
       } catch (error) {
-        console.error('Error repaying loan:', error)
+        console.error('Error repaying loan:', error);
+        throw error;
       }
 
       // Step 3: Notify the deployer the loan was repaid
@@ -146,7 +145,6 @@ if (protocolConfigInfo) {
               })
             }
             return signature;
-
     },
     onSuccess: async (signature) => {
       toastTx(signature, 'Loan repaid successfully')

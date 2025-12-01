@@ -24,6 +24,7 @@ pub const DEPOSITOR_SEED: &[u8] = b"depositor";
 pub const DEPLOYER_SEED: &[u8] = b"deployer";
 pub const PROTOCOL_CONFIG_SEED: &[u8] = b"config";
 pub const SECONDS_PER_YEAR: u64 = 31_536_000;
+const SHARE_DECIMALS: u128 = 1_000_000_000; // 1e9 precision
 
 /// Solana Developer Lending Protocol
 /// 
@@ -45,7 +46,7 @@ pub mod solignition {
     /// Initialize the protocol with admin and configuration
     pub fn initialize(
         ctx: Context<Initialize>,
-        admin_fee_split_bps: u16,  // % of admin fee to depositors vs treasury
+        admin_fee_split_bps: u16,  // % of admin fee to depositors vs protocol
         default_interest_rate_bps: u16,
         default_admin_fee_bps: u16,
     ) -> Result<()> {
@@ -57,8 +58,10 @@ pub mod solignition {
         config.admin_fee_split_bps = admin_fee_split_bps;
         config.default_interest_rate_bps = default_interest_rate_bps;
         config.default_admin_fee_bps = default_admin_fee_bps;
-        config.total_deposits = 0;
+       // config.total_deposits = 0;
         config.total_loans_outstanding = 0;
+        config.total_yield_distributed = 0;
+        config.total_shares = 0;
         config.is_paused = false;
         config.loan_counter = 0;
         
@@ -75,6 +78,10 @@ pub mod solignition {
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         require!(!ctx.accounts.protocol_config.is_paused, ErrorCode::ProtocolPaused);
         require!(amount > 0, ErrorCode::InvalidAmount);
+
+        let protocol_config = &mut ctx.accounts.protocol_config;
+        // Calculate shares to mint based on current share price
+        let shares_to_mint = calculate_shares_for_deposit(&protocol_config, amount, ctx.accounts.vault.to_account_info().lamports());
 
         // Transfer SOL from depositor to vault
         let ix = system_instruction::transfer(
@@ -93,74 +100,250 @@ pub mod solignition {
 
         // Update or create depositor record
         let depositor_record = &mut ctx.accounts.depositor_record;
+        
+        //let deposit_ratio = amount.checked_div(protocol_config.total_deposits).unwrap();
+        //let depositors_shares = protocol_config.total_shares.checked_mul(deposit_ratio).unwrap();
+        
         depositor_record.owner = ctx.accounts.depositor.key();
-        depositor_record.deposited_amount += amount;
-        depositor_record.share_amount += amount; // 1:1 initially, can be adjusted for yield
+        depositor_record.deposited_amount = depositor_record.deposited_amount.checked_add(amount).unwrap();
+        depositor_record.share_amount = depositor_record.share_amount.checked_add(shares_to_mint).unwrap(); 
         depositor_record.last_update_ts = Clock::get()?.unix_timestamp;
         depositor_record.bump = ctx.bumps.depositor_record;
 
-        // Update protocol totals
-        ctx.accounts.protocol_config.total_deposits += amount;
+        // Update protocol deposits
+       // protocol_config.total_deposits = protocol_config.total_deposits.checked_add(amount).unwrap();protocol_config.total_deposits
+        protocol_config.total_shares = protocol_config.total_shares.checked_add(shares_to_mint).unwrap();
 
         emit_cpi!(Deposited {
             depositor: ctx.accounts.depositor.key(),
             amount,
-            total_deposits: ctx.accounts.protocol_config.total_deposits,
+            total_shares: protocol_config.total_shares ,
         });
 
         Ok(())
     }
 
-    /// Withdraw SOL from the vault
-    pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
-        require!(!ctx.accounts.protocol_config.is_paused, ErrorCode::ProtocolPaused);
+    pub fn withdraw(ctx: Context<Withdraw>, shares: u64) -> Result<()> {
+    require!(!ctx.accounts.protocol_config.is_paused, ErrorCode::ProtocolPaused);
+    require!(shares > 0, ErrorCode::InvalidAmount);
 
-        let depositor_record = &ctx.accounts.depositor_record;
-        require!(amount <= depositor_record.share_amount, ErrorCode::InsufficientBalance);
-        
-        // Calculate available liquidity (total deposits - outstanding loans)
-        let available = ctx.accounts.protocol_config.total_deposits
-            .saturating_sub(ctx.accounts.protocol_config.total_loans_outstanding);
-        require!(amount <= available, ErrorCode::InsufficientLiquidity);
+    let protocol_config = &mut ctx.accounts.protocol_config;
+    let depositor_record = &mut ctx.accounts.depositor_record;
 
-        // Transfer SOL from vault to depositor
-        let vault_seeds = &[VAULT_SEED, &[ctx.bumps.vault]];
-        let signer = &[&vault_seeds[..]];
+    require!(
+        shares <= depositor_record.share_amount,
+        ErrorCode::InsufficientBalance
+    );
 
-        let ix = system_instruction::transfer(
+    // READ VAULT BALANCE
+    let vault_balance_total = ctx.accounts.vault.lamports() + protocol_config.total_loans_outstanding;
+
+    // CALCULATE SHARE PRICE
+    let share_price = (vault_balance_total as u128)
+        .checked_mul(SHARE_DECIMALS)
+        .unwrap()
+        .checked_div(protocol_config.total_shares as u128)
+        .unwrap();
+
+    // CONVERT SHARES → ASSETS
+    let amount = (shares as u128)
+        .checked_mul(share_price)
+        .unwrap()
+        .checked_div(SHARE_DECIMALS)
+        .unwrap() as u64;
+
+    // CHECK AVAILABLE LIQUIDITY = VAULT BALANCE 
+    let available = ctx.accounts.vault.lamports();
+    require!(amount <= available, ErrorCode::InsufficientLiquidity);
+
+    // BURN SHARES FIRST
+    depositor_record.share_amount = depositor_record
+        .share_amount
+        .saturating_sub(shares);
+    protocol_config.total_shares = protocol_config
+        .total_shares
+        .saturating_sub(shares);
+
+    // TRANSFER SOL OUT OF VAULT
+    let vault_seeds = &[VAULT_SEED, &[ctx.bumps.vault]];
+    let signer = &[&vault_seeds[..]];
+
+    let ix = system_instruction::transfer(
         &ctx.accounts.vault.key(),
         &ctx.accounts.depositor.key(),
         amount,
+    );
+    invoke_signed(
+        &ix,
+        &[
+            ctx.accounts.vault.to_account_info(),
+            ctx.accounts.depositor.to_account_info(),
+            ctx.accounts.system_program.to_account_info(),
+        ],
+        signer,
+    )?;
+
+    depositor_record.last_update_ts = Clock::get()?.unix_timestamp;
+
+    emit_cpi!(Withdrawn {
+        depositor: ctx.accounts.depositor.key(),
+        amount,
+        shares_burned: shares,
+        remaining_shares: depositor_record.share_amount,
+    });
+
+    Ok(())
+    }
+
+
+    pub fn claim_admin(ctx: Context<ClaimAdmin>) -> Result<()> {
+        require!(ctx.accounts.admin.key() == ctx.accounts.protocol_config.admin, ErrorCode::Unauthorized);
+        let amount = ctx.accounts.admin_pda.to_account_info().lamports();
+        require!(amount > 0, ErrorCode::InsufficientLiquidity);
+        let admin_seeds = &[ADMIN_SEED, &[ctx.bumps.admin_pda]];
+        let signer = &[&admin_seeds[..]];
+        let ix = system_instruction::transfer(
+            &ctx.accounts.admin_pda.key(),
+            &ctx.accounts.protocol_config.treasury.key(),
+            amount,
         );
         invoke_signed(
             &ix,
             &[
-                ctx.accounts.vault.to_account_info(),
-                ctx.accounts.depositor.to_account_info(),
+                ctx.accounts.admin_pda.to_account_info(),
+                ctx.accounts.protocol_config.to_account_info(),
                 ctx.accounts.system_program.to_account_info(),
             ],
             signer,
         )?;
-
-
-
-        // Update depositor record
-        let depositor_record = &mut ctx.accounts.depositor_record;
-        depositor_record.share_amount = depositor_record.share_amount.saturating_sub(amount);
-        depositor_record.deposited_amount = depositor_record.deposited_amount.saturating_sub(amount);
-        depositor_record.last_update_ts = Clock::get()?.unix_timestamp;
-
-        // Update protocol totals
-        ctx.accounts.protocol_config.total_deposits -= amount;
-
-        emit_cpi!(Withdrawn {
-            depositor: ctx.accounts.depositor.key(),
-            amount,
-            remaining_balance: depositor_record.share_amount,
-        });
-
         Ok(())
     }
+    /* 
+    /// Withdraw SOL from the vault
+    pub fn withdraw(ctx: Context<Withdraw>, shares: u64) -> Result<()> {
+    require!(!ctx.accounts.protocol_config.is_paused, ErrorCode::ProtocolPaused);
+    require!(shares > 0, ErrorCode::InvalidAmount);
+
+    let depositor_record = &ctx.accounts.depositor_record;
+    require!(shares <= depositor_record.share_amount, ErrorCode::InsufficientBalance);
+    
+    // Calculate asset amount for shares being redeemed
+    let vault_lamports = ctx.accounts.vault.to_account_info().lamports();
+    let amount = calculate_assets_for_shares(&ctx.accounts.protocol_config, shares, vault_lamports );
+    
+    // Calculate available liquidity
+    let available = ctx.accounts.protocol_config.total_deposits.saturating_sub(ctx.accounts.protocol_config.total_loans_outstanding);
+    require!(amount <= available, ErrorCode::InsufficientLiquidity);
+
+    // Transfer SOL from vault to depositor
+    let vault_seeds = &[VAULT_SEED, &[ctx.bumps.vault]];
+    let signer = &[&vault_seeds[..]];
+
+    let ix = system_instruction::transfer(
+        &ctx.accounts.vault.key(),
+        &ctx.accounts.depositor.key(),
+        amount,
+    );
+    invoke_signed(
+        &ix,
+        &[
+            ctx.accounts.vault.to_account_info(),
+            ctx.accounts.depositor.to_account_info(),
+            ctx.accounts.system_program.to_account_info(),
+        ],
+        signer,
+    )?;
+
+    // Update depositor record
+    let depositor_record = &mut ctx.accounts.depositor_record;
+    depositor_record.deposited_amount = depositor_record.deposited_amount.saturating_sub(amount);
+    depositor_record.share_amount = depositor_record.share_amount.saturating_sub(shares);
+    depositor_record.last_update_ts = Clock::get()?.unix_timestamp;
+
+    // Update protocol totals
+    ctx.accounts.protocol_config.total_deposits -= amount;
+    ctx.accounts.protocol_config.total_shares -= shares;
+
+    emit_cpi!(Withdrawn {
+        depositor: ctx.accounts.depositor.key(),
+        amount,
+        shares_burned: shares,
+        remaining_shares: depositor_record.share_amount,
+    });
+
+    Ok(())
+    }
+    
+
+    /// Claim earned yield only (keeps principal invested)
+    pub fn claim_yield(ctx: Context<ClaimYield>) -> Result<()> {
+    require!(!ctx.accounts.protocol_config.is_paused, ErrorCode::ProtocolPaused);
+
+    let depositor_record = &ctx.accounts.depositor_record;
+    let vault_balance = ctx.accounts.vault.to_account_info().lamports();
+    
+    // Calculate current value of shares
+    let current_value = calculate_assets_for_shares(
+        &ctx.accounts.protocol_config, 
+        depositor_record.share_amount,
+        vault_balance
+    );
+    
+    // Calculate yield earned
+    let yield_earned = current_value.saturating_sub(depositor_record.deposited_amount);
+    require!(yield_earned > 0, ErrorCode::NoYieldToClaim);
+    
+    // Check liquidity
+    require!(yield_earned <= vault_balance, ErrorCode::InsufficientLiquidity);
+    
+    // Calculate shares to burn for yield amount
+    let shares_to_burn = calculate_shares_for_deposit(
+        &ctx.accounts.protocol_config,
+        yield_earned,
+        vault_balance
+    );
+    
+    require!(shares_to_burn <= depositor_record.share_amount, ErrorCode::InsufficientBalance);
+    
+    // Transfer yield from vault to depositor
+    let vault_seeds = &[VAULT_SEED, &[ctx.bumps.vault]];
+    let signer = &[&vault_seeds[..]];
+
+    let ix = system_instruction::transfer(
+        &ctx.accounts.vault.key(),
+        &ctx.accounts.depositor.key(),
+        yield_earned,
+    );
+    invoke_signed(
+        &ix,
+        &[
+            ctx.accounts.vault.to_account_info(),
+            ctx.accounts.depositor.to_account_info(),
+            ctx.accounts.system_program.to_account_info(),
+        ],
+        signer,
+    )?;
+
+    // Update depositor record
+    let depositor_record = &mut ctx.accounts.depositor_record;
+    depositor_record.share_amount = depositor_record.share_amount.saturating_sub(shares_to_burn);
+    depositor_record.last_update_ts = Clock::get()?.unix_timestamp;
+    // Note: deposited_amount stays the same since we're only claiming yield
+
+    // Update protocol totals
+    //ctx.accounts.protocol_config.total_yield_distributed = ctx.accounts.protocol_config.total_yield_distributed.saturating_sub(yield_earned);
+    ctx.accounts.protocol_config.total_shares = ctx.accounts.protocol_config.total_shares.saturating_sub(shares_to_burn);
+
+    emit_cpi!(YieldClaimed {
+        depositor: ctx.accounts.depositor.key(),
+        amount: yield_earned,
+        shares_burned: shares_to_burn,
+        remaining_shares: depositor_record.share_amount,
+    });
+
+    Ok(())
+    }*/
+
 
     /// Request a loan and pay upfront admin fee
     pub fn request_loan(
@@ -172,22 +355,32 @@ pub mod solignition {
     ) -> Result<()> {
         require!(!ctx.accounts.protocol_config.is_paused, ErrorCode::ProtocolPaused);
         require!(principal > 0, ErrorCode::InvalidAmount);
+        let config = &mut ctx.accounts.protocol_config;
+
         require!(duration > 0, ErrorCode::InvalidDuration);
         require!(interest_rate_bps <= 10000, ErrorCode::InvalidInterestRate);
-        require!(admin_fee_bps <= 10000, ErrorCode::InvalidAdminFee);
+        require!(admin_fee_bps <= 10000 && admin_fee_bps >= config.default_admin_fee_bps , ErrorCode::InvalidAdminFee);
 
         //require!(ctx.accounts.protocol_config.loan_counter == , ErrorCode::InvalidLoanCounter);
 
         // Calculate upfront admin fee
-        let admin_fee = (principal as u128)
+        let fee_total = (principal as u128)
             .checked_mul(admin_fee_bps as u128)
             .unwrap()
             .checked_div(10_000)
             .unwrap() as u64;
 
+        //Calculate split to pool treasury based of config admin fee split bps
+        let admin_fee = (fee_total as u128)
+            .checked_mul((config.admin_fee_split_bps) as u128)
+            .unwrap()
+            .checked_div(10_000)
+            .unwrap() as u64;
+
+        let treasury_share = fee_total - admin_fee;
+
         // Check vault has sufficient liquidity
-        let available = ctx.accounts.protocol_config.total_deposits
-            .saturating_sub(ctx.accounts.protocol_config.total_loans_outstanding);
+        let available = ctx.accounts.vault.lamports();//ctx.accounts.protocol_config.total_deposits.saturating_sub(ctx.accounts.protocol_config.total_loans_outstanding);
         require!(principal <= available, ErrorCode::InsufficientLiquidity);
 
         // Pay admin fee directly to admin PDA
@@ -206,6 +399,29 @@ pub mod solignition {
                 ],
             )?;
         }
+        // Pay treasury share directly to vault
+        if treasury_share > 0 {
+            let ix = system_instruction::transfer(
+                &ctx.accounts.borrower.key(),
+                &ctx.accounts.vault.key(),
+                treasury_share,
+            );
+            invoke(
+                &ix,
+                &[
+                    ctx.accounts.borrower.to_account_info(),
+                    ctx.accounts.vault.to_account_info(),
+                    ctx.accounts.system_program.to_account_info(),
+                ],
+            )?;
+        }
+
+        //transfer treasury share from admin PDA to vault pda
+        //**ctx.accounts.admin_pda.to_account_info().try_borrow_mut_lamports()? = ctx.accounts treasury_share;
+        //**ctx.accounts.vault.to_account_info().try_borrow_mut_lamports()? += treasury_share;
+
+        //update share price
+        distribute_yield(&mut ctx.accounts.protocol_config, treasury_share);
 
         // Transfer principal from vault to deployer
         // The deployer will handle program deployment off-chain
@@ -237,7 +453,7 @@ pub mod solignition {
         loan.duration = duration;
         loan.interest_rate_bps = interest_rate_bps;
         loan.admin_fee_bps = admin_fee_bps;
-        loan.admin_fee_paid = admin_fee;
+        loan.admin_fee_paid = fee_total;
         loan.start_ts = Clock::get()?.unix_timestamp;
         loan.state = LoanState::Pending;
         loan.repaid_ts = Some(0);
@@ -257,7 +473,7 @@ pub mod solignition {
             principal,
             duration,
             interest_rate_bps,
-            admin_fee,
+            admin_fee: fee_total,
         });
 
         Ok(())
@@ -301,15 +517,44 @@ pub mod solignition {
         loan.principal,
         loan.interest_rate_bps,
         elapsed,
+        loan.duration as u64,
     );
+
+
+    //Calculate split to pool treasury based of config admin fee split bps
+    let admin_fee = (interest as u128)
+            .checked_mul((ctx.accounts.protocol_config.admin_fee_split_bps) as u128)
+            .unwrap()
+            .checked_div(10_000)
+            .unwrap() as u64;
+        
+    let treasury_share = interest - admin_fee;
+
+    // transfers admins fee from borrower to admin pda
+    if admin_fee > 0 {
+            let ix = system_instruction::transfer(
+                &ctx.accounts.borrower.key(),
+                &ctx.accounts.admin_pda.key(),
+                admin_fee,
+            );
+            invoke(
+                &ix,
+                &[
+                    ctx.accounts.borrower.to_account_info(),
+                    ctx.accounts.admin_pda.to_account_info(),
+                    ctx.accounts.system_program.to_account_info(),
+                ],
+            )?;
+        }
     
-    let total_due = loan.principal + interest;
+    let vault_fee = interest - admin_fee;
+    let vault_total_due = loan.principal + vault_fee;
 
     // Transfer repayment from borrower to vault
     let ix = system_instruction::transfer(
         &ctx.accounts.borrower.key(),
         &ctx.accounts.vault.key(),
-        total_due,
+        vault_total_due,
     );
     invoke(
         &ix,
@@ -320,7 +565,7 @@ pub mod solignition {
         ],
     )?;
 
-    // Distribute interest to depositors
+    // track yield to depositors
     distribute_yield(&mut ctx.accounts.protocol_config, interest);
 
     // Update loan state - marked as paid but authority not yet transferred
@@ -334,7 +579,7 @@ pub mod solignition {
 
     emit_cpi!(LoanRepaid {
         loan_id: loan.loan_id,
-        total_repaid: total_due,
+        total_repaid: vault_total_due + admin_fee,
         interest_paid: interest,
     });
 
@@ -401,7 +646,7 @@ pub fn transfer_authority_to_borrower(
         
         // Principal is already gone (used for deployment if deployed)
         // Admin fee was already collected upfront
-        
+        /* 
         // Split admin fee between depositors and treasury based on config
         let depositor_share = (loan.admin_fee_paid as u128)
             .checked_mul(ctx.accounts.protocol_config.admin_fee_split_bps as u128)
@@ -435,21 +680,18 @@ pub fn transfer_authority_to_borrower(
         // Distribute depositor share as yield
         if depositor_share > 0 {
             distribute_yield(&mut ctx.accounts.protocol_config, depositor_share);
-        }
+        }*/
 
         // Update loan state
         let loan = &mut ctx.accounts.loan;
         loan.state = LoanState::Recovered;
         loan.recovered_ts = Some(clock.unix_timestamp);
 
-        // Update protocol state (principal already deducted at origination)
-        ctx.accounts.protocol_config.total_loans_outstanding -= loan.principal;
-
         emit_cpi!(LoanRecovered {
             loan_id: loan.loan_id,
             admin_fee_distributed: loan.admin_fee_paid,
-            depositor_share,
-            treasury_share,
+            //depositor_share,
+            //treasury_share,
         });
 
         Ok(())
@@ -498,8 +740,11 @@ pub fn transfer_authority_to_borrower(
         
         // Update loan record to track reclaimed amount
         let loan = &mut ctx.accounts.loan;
-        loan.reclaimed_amount = Some(loan.reclaimed_amount.unwrap_or(0) + amount);
+        loan.reclaimed_amount = Some(amount);
         loan.reclaimed_ts = Some(Clock::get()?.unix_timestamp);
+
+        // Update protocol state (principal already deducted at origination)
+        ctx.accounts.protocol_config.total_loans_outstanding -= loan.principal;
         
         emit_cpi!(SolReclaimed {
             loan_id: loan.loan_id,
@@ -555,24 +800,73 @@ pub fn transfer_authority_to_borrower(
 }
 
 /// Helper function to calculate interest
-fn calculate_interest(principal: u64, rate_bps: u16, elapsed_seconds: u64) -> u64 {
+fn calculate_interest(principal: u64, rate_bps: u16, elapsed_seconds: u64, duration_seconds: u64) -> u64 {
     let interest = (principal as u128)
         .checked_mul(rate_bps as u128)
         .unwrap()
         .checked_mul(elapsed_seconds as u128)
         .unwrap()
-        .checked_div(10_000u128 * SECONDS_PER_YEAR as u128)
+        .checked_div(10_000u128 * duration_seconds as u128) // was SECONDS_PER_YEAR for apy
         .unwrap();
     
     interest as u64
 }
 
+/// Calculate share price (total assets / total shares)
+/// Returns price in lamports with 9 decimal precision
+fn calculate_share_price(config: &ProtocolConfig, vault_lamports: u64) -> u128 {
+    if config.total_shares == 0 {
+        return 1_000_000_000; // 1:1 ratio when no shares exist (9 decimals)
+    }
+    //use vault balance
+    let total_assets = vault_lamports + config.total_loans_outstanding;//config.total_deposits + config.total_yield_distributed;
+    
+    // Price = (total_assets * 10^9) / total_shares
+    (total_assets as u128)
+        .checked_mul(1_000_000_000)
+        .unwrap()
+        .checked_div(config.total_shares as u128)
+        .unwrap()
+}
+
+/// Calculate shares to mint for a deposit amount
+fn calculate_shares_for_deposit(config: &ProtocolConfig, amount: u64, vault_lamports: u64) -> u64 {
+    if config.total_shares == 0 {
+        // First deposit: 1:1 ratio
+        return amount;
+    }
+    
+    let share_price = calculate_share_price(config, vault_lamports);
+    
+    // shares = (amount * 10^9) / share_price
+    ((amount as u128)
+        .checked_mul(1_000_000_000)
+        .unwrap()
+        .checked_div(share_price)
+        .unwrap()) as u64
+}
+
+/// Calculate asset value for a share amount
+fn calculate_assets_for_shares(config: &ProtocolConfig, shares: u64 , vault_lamports: u64) -> u64 {
+    if shares == 0 || config.total_shares == 0 {
+        return 0;
+    }
+    
+    let share_price = calculate_share_price(config, vault_lamports);
+    
+    // assets = (shares * share_price) / 10^9
+    ((shares as u128)
+        .checked_mul(share_price)
+        .unwrap()
+        .checked_div(1_000_000_000)
+        .unwrap()) as u64
+}
+
 /// Helper function to distribute yield to depositors
 fn distribute_yield(config: &mut ProtocolConfig, amount: u64) {
-    if config.total_deposits > 0 && amount > 0 {
-        // This increases the value per share for all depositors
-        // In a real implementation, you'd update a yield_per_share variable
-        // that gets factored into withdrawal calculations
+    if config.total_shares > 0 && amount > 0 {
+        // Add yield to total_yield_distributed
+        // This automatically increases share value for all holders
         config.total_yield_distributed += amount;
     }
 }
@@ -649,7 +943,7 @@ pub struct Deposit<'info> {
     )]
     pub protocol_config: Account<'info, ProtocolConfig>,
     
-    /// CHECK: Vault PDA
+    /// CHECK: Vault PDA for loan requests
     #[account(
         mut,
         seeds = [VAULT_SEED],
@@ -688,10 +982,72 @@ pub struct Withdraw<'info> {
         bump
     )]
     pub vault: AccountInfo<'info>,
+
+    /*/ CHECK: treasury PDA
+    #[account(
+        mut,
+        seeds = [TREASURY_SEED],
+        bump
+    )]
+    pub treasury_pda: AccountInfo<'info>,*/
     
     pub system_program: Program<'info, System>,
 }
 
+#[event_cpi]
+#[derive(Accounts)]
+pub struct ClaimAdmin<'info> {
+    pub admin: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [ADMIN_SEED],
+        bump
+    )]
+    pub admin_pda: SystemAccount<'info>,
+    
+    #[account(
+        seeds = [PROTOCOL_CONFIG_SEED],
+        has_one = admin @ ErrorCode::Unauthorized,
+        bump = protocol_config.bump
+    )]
+    pub protocol_config: Account<'info, ProtocolConfig>,
+
+    pub system_program: Program<'info, System>,
+}
+/* 
+#[event_cpi]
+#[derive(Accounts)]
+pub struct ClaimAdmin<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [DEPOSITOR_SEED, depositor.key().as_ref()],
+        bump = depositor_record.bump,
+        constraint = depositor_record.owner == depositor.key() @ ErrorCode::UnauthorizedDepositor
+    )]
+    pub depositor_record: Account<'info, DepositorRecord>,
+    
+    #[account(
+        mut,
+        seeds = [PROTOCOL_CONFIG_SEED],
+        bump = protocol_config.bump
+    )]
+    pub protocol_config: Account<'info, ProtocolConfig>,
+    
+    /// CHECK: Vault PDA
+    #[account(
+        mut,
+        seeds = [VAULT_SEED],
+        bump
+    )]
+    pub vault: AccountInfo<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
+*/
 #[event_cpi]
 #[derive(Accounts)]
 //#[instruction(loan_id: u64)]
@@ -730,6 +1086,14 @@ pub struct RequestLoan<'info> {
         bump
     )]
     pub admin_pda: AccountInfo<'info>,
+
+    /*/ CHECK: treasury fee collection PDA
+    #[account(
+        mut,
+        seeds = [TREASURY_SEED],
+        bump
+    )]
+    pub treasury_pda: AccountInfo<'info>,*/
     
     
     /// CHECK: Deployer wallet - receives funds for deployment
@@ -793,6 +1157,14 @@ pub struct RepayLoan<'info> {
         bump
     )]
     pub vault: AccountInfo<'info>,
+
+    /// CHECK: admin PDA
+    #[account(
+        mut,
+        seeds = [ADMIN_SEED],
+        bump
+    )]
+    pub admin_pda: AccountInfo<'info>,
     
     pub system_program: Program<'info, System>,
 }
@@ -934,8 +1306,9 @@ pub struct ProtocolConfig {
     pub admin_fee_split_bps: u16,      // % to depositors vs treasury
     pub default_interest_rate_bps: u16,
     pub default_admin_fee_bps: u16,
-    pub total_deposits: u64,
+ //   pub total_deposits: u64,
     pub total_loans_outstanding: u64,
+    pub total_shares: u64,
     pub total_yield_distributed: u64,
     pub loan_counter: u64,
     pub is_paused: bool,
@@ -943,7 +1316,7 @@ pub struct ProtocolConfig {
 }
 
 impl ProtocolConfig {
-    pub const SIZE: usize = 32 + 32 + 32 + 2 + 2 + 2 + 8 + 8 + 8 + 8 + 1 + 8;
+    pub const SIZE: usize = 32 + 32 + 32 + 2 + 2 + 2 + 8 + 8 + 8 + 8 + 1 + 8 + 8 ;
 }
 
 #[account]
@@ -1006,14 +1379,15 @@ pub struct ProtocolInitialized {
 pub struct Deposited {
     pub depositor: Pubkey,
     pub amount: u64,
-    pub total_deposits: u64,
+    pub total_shares: u64,
 }
 
 #[event]
 pub struct Withdrawn {
     pub depositor: Pubkey,
     pub amount: u64,
-    pub remaining_balance: u64,
+    pub shares_burned: u64,
+    pub remaining_shares: u64,
 }
 
 #[event]
@@ -1043,8 +1417,8 @@ pub struct LoanRepaid {
 pub struct LoanRecovered {
     pub loan_id: u64,
     pub admin_fee_distributed: u64,
-    pub depositor_share: u64,
-    pub treasury_share: u64,
+    //pub depositor_share: u64,
+    //pub treasury_share: u64,
 }
 
 #[event]
@@ -1070,6 +1444,14 @@ pub struct ConfigUpdated {
     pub admin_fee_split_bps: u16,
     pub default_interest_rate_bps: u16,
     pub default_admin_fee_bps: u16,
+}
+
+#[event]
+pub struct YieldClaimed {
+    pub depositor: Pubkey,
+    pub amount: u64,
+    pub shares_burned: u64,
+    pub remaining_shares: u64,
 }
 
 // ===== ERRORS =====
@@ -1112,6 +1494,10 @@ pub enum ErrorCode {
     ProgramAlreadySet,
     #[msg("Invalid program pubkey")]
     InvalidProgram,
+    #[msg("Error in calculations")]
+    MathOverflow,
+    #[msg("No yield to claim")]
+    NoYieldToClaim,
 }
 
 #[cfg(test)]
@@ -1125,8 +1511,9 @@ mod tests {
         let principal = 0;
         let rate_bps = 500; // 5%
         let elapsed = 31_536_000; // 1 year
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed, vault_lamports);
         assert_eq!(interest, 0);
     }
 
@@ -1135,8 +1522,9 @@ mod tests {
         let principal = 1_000_000_000; // 1 SOL
         let rate_bps = 0;
         let elapsed = 31_536_000; // 1 year
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed, vault_lamports);
         assert_eq!(interest, 0);
     }
 
@@ -1145,8 +1533,9 @@ mod tests {
         let principal = 1_000_000_000; // 1 SOL
         let rate_bps = 500; // 5%
         let elapsed = 0;
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed, vault_lamports);
         assert_eq!(interest, 0);
     }
 
@@ -1155,9 +1544,10 @@ mod tests {
         let principal = 1_000_000_000; // 1 SOL (1 billion lamports)
         let rate_bps = 500; // 5%
         let elapsed = 31_536_000; // 1 year in seconds
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
         // Expected: 1 SOL * 5% * 1 year = 0.05 SOL = 50_000_000 lamports
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed,vault_lamports);
         assert_eq!(interest, 50_000_000);
     }
 
@@ -1166,9 +1556,10 @@ mod tests {
         let principal = 1_000_000_000; // 1 SOL
         let rate_bps = 1000; // 10%
         let elapsed = 15_768_000; // 0.5 year in seconds
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
         // Expected: 1 SOL * 10% * 0.5 year = 0.05 SOL = 50_000_000 lamports
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed, vault_lamports);
         assert_eq!(interest, 50_000_000);
     }
 
@@ -1177,9 +1568,10 @@ mod tests {
         let principal = 10_000_000_000; // 10 SOL
         let rate_bps = 1200; // 12% annual
         let elapsed = 2_628_000; // ~1 month (1/12 year)
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
         // Expected: 10 SOL * 12% * (1/12) = 0.1 SOL = 100_000_000 lamports
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed, vault_lamports);
         assert_eq!(interest, 100_000_000);
     }
 
@@ -1188,9 +1580,10 @@ mod tests {
         let principal = 1_000_000_000; // 1 SOL
         let rate_bps = 730; // 7.3% annual
         let elapsed = 86_400; // 1 day in seconds
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
         // Expected: 1 SOL * 7.3% * (1/365) ≈ 200_000 lamports
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed, vault_lamports);
         assert_eq!(interest, 200_000);
     }
 
@@ -1199,9 +1592,10 @@ mod tests {
         let principal = 100_000_000_000; // 100 SOL
         let rate_bps = 800; // 8%
         let elapsed = 31_536_000; // 1 year
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
         // Expected: 100 SOL * 8% * 1 year = 8 SOL = 8_000_000_000 lamports
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed,vault_lamports);
         assert_eq!(interest, 8_000_000_000);
     }
 
@@ -1210,9 +1604,10 @@ mod tests {
         let principal = 1_000_000_000; // 1 SOL
         let rate_bps = 10000; // 100%
         let elapsed = 31_536_000; // 1 year
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
         // Expected: 1 SOL * 100% * 1 year = 1 SOL = 1_000_000_000 lamports
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed,vault_lamports);
         assert_eq!(interest, 1_000_000_000);
     }
 
@@ -1221,9 +1616,10 @@ mod tests {
         let principal = 1_000_000; // 0.001 SOL
         let rate_bps = 500; // 5%
         let elapsed = 31_536_000; // 1 year
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
         // Expected: 0.001 SOL * 5% * 1 year = 0.00005 SOL = 50_000 lamports
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed,vault_lamports);
         assert_eq!(interest, 50_000);
     }
 
@@ -1232,9 +1628,10 @@ mod tests {
         let principal = 5_000_000_000; // 5 SOL
         let rate_bps = 600; // 6%
         let elapsed = 63_072_000; // 2 years
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
         // Expected: 5 SOL * 6% * 2 years = 0.6 SOL = 600_000_000 lamports
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed,vault_lamports);
         assert_eq!(interest, 600_000_000);
     }
 
@@ -1243,9 +1640,10 @@ mod tests {
         let principal = 10_000_000_000; // 10 SOL
         let rate_bps = 123; // 1.23%
         let elapsed = 31_536_000; // 1 year
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
         // Expected: 10 SOL * 1.23% * 1 year = 0.123 SOL = 123_000_000 lamports
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed,vault_lamports);
         assert_eq!(interest, 123_000_000);
     }
 
@@ -1254,9 +1652,10 @@ mod tests {
         let principal = 1_000_000_000; // 1 SOL
         let rate_bps = 500; // 5%
         let elapsed = 3600; // 1 hour
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
         // Expected: very small interest for 1 hour
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed,vault_lamports);
         assert!(interest < 10_000); // Should be less than 0.00001 SOL
     }
 
@@ -1271,9 +1670,10 @@ mod tests {
             admin_fee_split_bps: 5000,
             default_interest_rate_bps: 500,
             default_admin_fee_bps: 100,
-            total_deposits: 0,
+         //   total_deposits: 0,
             total_loans_outstanding: 0,
             total_yield_distributed: 0,
+            total_shares: 0,
             loan_counter: 0,
             is_paused: false,
             bump: 0,
@@ -1295,9 +1695,10 @@ mod tests {
             admin_fee_split_bps: 5000,
             default_interest_rate_bps: 500,
             default_admin_fee_bps: 100,
-            total_deposits: 10_000_000_000,
+       //     total_deposits: 10_000_000_000,
             total_loans_outstanding: 0,
             total_yield_distributed: 0,
+            total_shares: 0,
             loan_counter: 0,
             is_paused: false,
             bump: 0,
@@ -1317,9 +1718,10 @@ mod tests {
             treasury: Pubkey::default(),
             deployer: Pubkey::default(),
             admin_fee_split_bps: 5000,
+            total_shares: 0,
             default_interest_rate_bps: 500,
             default_admin_fee_bps: 100,
-            total_deposits: 10_000_000_000, // 10 SOL
+         //   total_deposits: 10_000_000_000, // 10 SOL
             total_loans_outstanding: 5_000_000_000,
             total_yield_distributed: 0,
             loan_counter: 1,
@@ -1340,9 +1742,10 @@ mod tests {
             treasury: Pubkey::default(),
             deployer: Pubkey::default(),
             admin_fee_split_bps: 5000,
+            total_shares: 0,
             default_interest_rate_bps: 500,
             default_admin_fee_bps: 100,
-            total_deposits: 20_000_000_000, // 20 SOL
+        //    total_deposits: 20_000_000_000, // 20 SOL
             total_loans_outstanding: 10_000_000_000,
             total_yield_distributed: 0,
             loan_counter: 2,
@@ -1372,7 +1775,8 @@ mod tests {
             admin_fee_split_bps: 5000,
             default_interest_rate_bps: 500,
             default_admin_fee_bps: 100,
-            total_deposits: 100_000_000_000, // 100 SOL
+            total_shares: 0,
+        //    total_deposits: 100_000_000_000, // 100 SOL
             total_loans_outstanding: 50_000_000_000,
             total_yield_distributed: 0,
             loan_counter: 5,
@@ -1395,7 +1799,8 @@ mod tests {
             admin_fee_split_bps: 5000,
             default_interest_rate_bps: 500,
             default_admin_fee_bps: 100,
-            total_deposits: 1_000_000, // 0.001 SOL
+         //   total_deposits: 1_000_000, // 0.001 SOL
+            total_shares: 0,
             total_loans_outstanding: 0,
             total_yield_distributed: 0,
             loan_counter: 0,
@@ -1418,9 +1823,10 @@ mod tests {
         let principal = u64::MAX / 100; // Large but safe principal
         let rate_bps = 100; // 1%
         let elapsed = 31_536_000; // 1 year
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
         // Should not panic
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed, vault_lamports);
         assert!(interest > 0);
     }
 
@@ -1430,9 +1836,10 @@ mod tests {
         let principal = 1_000; // Very small amount
         let rate_bps = 1; // 0.01%
         let elapsed = 31_536_000; // 1 year
+        let vault_lamports = 10_000_000_000; // 10 SOL
         
         // Expected: 1000 * 0.0001 * 1 = 0 (rounds down due to integer math)
-        let interest = calculate_interest(principal, rate_bps, elapsed);
+        let interest = calculate_interest(principal, rate_bps, elapsed, vault_lamports);
         assert_eq!(interest, 0);
     }
 

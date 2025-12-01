@@ -6,6 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from './claimAdmin';
 export * from './deposit';
 export * from './initialize';
 export * from './recoverLoan';

@@ -93,16 +93,16 @@ export type WithdrawInstruction<
 
 export type WithdrawInstructionData = {
   discriminator: ReadonlyUint8Array;
-  amount: bigint;
+  shares: bigint;
 };
 
-export type WithdrawInstructionDataArgs = { amount: number | bigint };
+export type WithdrawInstructionDataArgs = { shares: number | bigint };
 
 export function getWithdrawInstructionDataEncoder(): FixedSizeEncoder<WithdrawInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([
       ['discriminator', fixEncoderSize(getBytesEncoder(), 8)],
-      ['amount', getU64Encoder()],
+      ['shares', getU64Encoder()],
     ]),
     (value) => ({ ...value, discriminator: WITHDRAW_DISCRIMINATOR })
   );
@@ -111,7 +111,7 @@ export function getWithdrawInstructionDataEncoder(): FixedSizeEncoder<WithdrawIn
 export function getWithdrawInstructionDataDecoder(): FixedSizeDecoder<WithdrawInstructionData> {
   return getStructDecoder([
     ['discriminator', fixDecoderSize(getBytesDecoder(), 8)],
-    ['amount', getU64Decoder()],
+    ['shares', getU64Decoder()],
   ]);
 }
 
@@ -141,7 +141,7 @@ export type WithdrawAsyncInput<
   systemProgram?: Address<TAccountSystemProgram>;
   eventAuthority?: Address<TAccountEventAuthority>;
   program: Address<TAccountProgram>;
-  amount: WithdrawInstructionDataArgs['amount'];
+  shares: WithdrawInstructionDataArgs['shares'];
 };
 
 export async function getWithdrawInstructionAsync<
@@ -286,7 +286,7 @@ export type WithdrawInput<
   systemProgram?: Address<TAccountSystemProgram>;
   eventAuthority: Address<TAccountEventAuthority>;
   program: Address<TAccountProgram>;
-  amount: WithdrawInstructionDataArgs['amount'];
+  shares: WithdrawInstructionDataArgs['shares'];
 };
 
 export function getWithdrawInstruction<

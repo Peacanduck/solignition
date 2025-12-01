@@ -28,6 +28,101 @@ export type Solignition = {
   ],
   "instructions": [
     {
+      "name": "claimAdmin",
+      "discriminator": [
+        148,
+        173,
+        240,
+        143,
+        219,
+        57,
+        241,
+        136
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "protocolConfig"
+          ]
+        },
+        {
+          "name": "adminPda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  100,
+                  109,
+                  105,
+                  110
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocolConfig",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "eventAuthority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  95,
+                  95,
+                  101,
+                  118,
+                  101,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "deposit",
       "docs": [
         "Deposit SOL into the vault"
@@ -540,6 +635,24 @@ export type Solignition = {
                   117,
                   108,
                   116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "adminPda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  100,
+                  109,
+                  105,
+                  110
                 ]
               }
             ]
@@ -1304,9 +1417,6 @@ export type Solignition = {
     },
     {
       "name": "withdraw",
-      "docs": [
-        "Withdraw SOL from the vault"
-      ],
       "discriminator": [
         183,
         18,
@@ -1425,7 +1535,7 @@ export type Solignition = {
       ],
       "args": [
         {
-          "name": "amount",
+          "name": "shares",
           "type": "u64"
         }
       ]
@@ -1615,6 +1725,19 @@ export type Solignition = {
         219,
         13
       ]
+    },
+    {
+      "name": "yieldClaimed",
+      "discriminator": [
+        177,
+        201,
+        94,
+        68,
+        19,
+        200,
+        227,
+        27
+      ]
     }
   ],
   "errors": [
@@ -1707,6 +1830,16 @@ export type Solignition = {
       "code": 6017,
       "name": "invalidProgram",
       "msg": "Invalid program pubkey"
+    },
+    {
+      "code": 6018,
+      "name": "mathOverflow",
+      "msg": "Error in calculations"
+    },
+    {
+      "code": 6019,
+      "name": "noYieldToClaim",
+      "msg": "No yield to claim"
     }
   ],
   "types": [
@@ -1760,7 +1893,7 @@ export type Solignition = {
             "type": "u64"
           },
           {
-            "name": "totalDeposits",
+            "name": "totalShares",
             "type": "u64"
           }
         ]
@@ -1912,14 +2045,6 @@ export type Solignition = {
           {
             "name": "adminFeeDistributed",
             "type": "u64"
-          },
-          {
-            "name": "depositorShare",
-            "type": "u64"
-          },
-          {
-            "name": "treasuryShare",
-            "type": "u64"
           }
         ]
       }
@@ -2029,11 +2154,11 @@ export type Solignition = {
             "type": "u16"
           },
           {
-            "name": "totalDeposits",
+            "name": "totalLoansOutstanding",
             "type": "u64"
           },
           {
-            "name": "totalLoansOutstanding",
+            "name": "totalShares",
             "type": "u64"
           },
           {
@@ -2117,7 +2242,35 @@ export type Solignition = {
             "type": "u64"
           },
           {
-            "name": "remainingBalance",
+            "name": "sharesBurned",
+            "type": "u64"
+          },
+          {
+            "name": "remainingShares",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "yieldClaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "depositor",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "sharesBurned",
+            "type": "u64"
+          },
+          {
+            "name": "remainingShares",
             "type": "u64"
           }
         ]

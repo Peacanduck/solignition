@@ -170,7 +170,7 @@ export function RequestLoanPanel({ account }: { account: UiWalletAccount }) {
 
     const durationSeconds = BigInt(days * 24 * 60 * 60)
     const interestRateBps = Math.floor(rate * 100)
-    const adminFeeBps = configQuery.data?.data.defaultAdminFeeBps ?? 100
+    const adminFeeBps = configQuery.data?.data.defaultAdminFeeBps ?? 500
 
     await requestLoanMutation.mutateAsync({
       principal: BigInt(Math.floor(principalAmount * 1_000_000_000)),
@@ -198,7 +198,7 @@ export function RequestLoanPanel({ account }: { account: UiWalletAccount }) {
     if (isNaN(principalAmount) || isNaN(rate)) return null
 
     const interest = (principalAmount * rate) / 100
-    return (principalAmount + interest).toFixed(2)
+    return (principalAmount + interest).toFixed(6)
   }
 
   const formatFileSize = (bytes: number) => {

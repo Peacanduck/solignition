@@ -22,6 +22,101 @@
   ],
   "instructions": [
     {
+      "name": "claim_admin",
+      "discriminator": [
+        148,
+        173,
+        240,
+        143,
+        219,
+        57,
+        241,
+        136
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "protocol_config"
+          ]
+        },
+        {
+          "name": "admin_pda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  100,
+                  109,
+                  105,
+                  110
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  95,
+                  95,
+                  101,
+                  118,
+                  101,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "deposit",
       "docs": [
         "Deposit SOL into the vault"
@@ -534,6 +629,24 @@
                   117,
                   108,
                   116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin_pda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  100,
+                  109,
+                  105,
+                  110
                 ]
               }
             ]
@@ -1298,9 +1411,6 @@
     },
     {
       "name": "withdraw",
-      "docs": [
-        "Withdraw SOL from the vault"
-      ],
       "discriminator": [
         183,
         18,
@@ -1419,7 +1529,7 @@
       ],
       "args": [
         {
-          "name": "amount",
+          "name": "shares",
           "type": "u64"
         }
       ]
@@ -1609,6 +1719,19 @@
         219,
         13
       ]
+    },
+    {
+      "name": "YieldClaimed",
+      "discriminator": [
+        177,
+        201,
+        94,
+        68,
+        19,
+        200,
+        227,
+        27
+      ]
     }
   ],
   "errors": [
@@ -1701,6 +1824,16 @@
       "code": 6017,
       "name": "InvalidProgram",
       "msg": "Invalid program pubkey"
+    },
+    {
+      "code": 6018,
+      "name": "MathOverflow",
+      "msg": "Error in calculations"
+    },
+    {
+      "code": 6019,
+      "name": "NoYieldToClaim",
+      "msg": "No yield to claim"
     }
   ],
   "types": [
@@ -1754,7 +1887,7 @@
             "type": "u64"
           },
           {
-            "name": "total_deposits",
+            "name": "total_shares",
             "type": "u64"
           }
         ]
@@ -1906,14 +2039,6 @@
           {
             "name": "admin_fee_distributed",
             "type": "u64"
-          },
-          {
-            "name": "depositor_share",
-            "type": "u64"
-          },
-          {
-            "name": "treasury_share",
-            "type": "u64"
           }
         ]
       }
@@ -2023,11 +2148,11 @@
             "type": "u16"
           },
           {
-            "name": "total_deposits",
+            "name": "total_loans_outstanding",
             "type": "u64"
           },
           {
-            "name": "total_loans_outstanding",
+            "name": "total_shares",
             "type": "u64"
           },
           {
@@ -2111,7 +2236,35 @@
             "type": "u64"
           },
           {
-            "name": "remaining_balance",
+            "name": "shares_burned",
+            "type": "u64"
+          },
+          {
+            "name": "remaining_shares",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "YieldClaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "depositor",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "shares_burned",
+            "type": "u64"
+          },
+          {
+            "name": "remaining_shares",
             "type": "u64"
           }
         ]

@@ -14,6 +14,7 @@ import {
   type ReadonlyUint8Array,
 } from '@solana/kit';
 import {
+  type ParsedClaimAdminInstruction,
   type ParsedDepositInstruction,
   type ParsedInitializeInstruction,
   type ParsedRecoverLoanInstruction,
@@ -79,6 +80,7 @@ export function identifySolignitionAccount(
 }
 
 export enum SolignitionInstruction {
+  ClaimAdmin,
   Deposit,
   Initialize,
   RecoverLoan,
@@ -96,6 +98,17 @@ export function identifySolignitionInstruction(
   instruction: { data: ReadonlyUint8Array } | ReadonlyUint8Array
 ): SolignitionInstruction {
   const data = 'data' in instruction ? instruction.data : instruction;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([148, 173, 240, 143, 219, 57, 241, 136])
+      ),
+      0
+    )
+  ) {
+    return SolignitionInstruction.ClaimAdmin;
+  }
   if (
     containsBytes(
       data,
@@ -225,6 +238,9 @@ export function identifySolignitionInstruction(
 export type ParsedSolignitionInstruction<
   TProgram extends string = '4dWBvsjopo5Z145Xmse3Lx41G1GKpMyWMLc6p4a52T4N',
 > =
+  | ({
+      instructionType: SolignitionInstruction.ClaimAdmin;
+    } & ParsedClaimAdminInstruction<TProgram>)
   | ({
       instructionType: SolignitionInstruction.Deposit;
     } & ParsedDepositInstruction<TProgram>)

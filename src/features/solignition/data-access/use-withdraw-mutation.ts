@@ -23,7 +23,7 @@ export function useWithdrawMutation({ account }: { account: UiWalletAccount }) {
       const instruction = await getWithdrawInstructionAsync({
         depositor: signer,
         protocolConfig,
-        amount,
+        shares: amount,
       })
 
       return await signAndSend(instruction, signer)

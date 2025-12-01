@@ -17,26 +17,17 @@ import {
   type FixedSizeEncoder,
 } from '@solana/kit';
 
-export type LoanRecovered = {
-  loanId: bigint;
-  adminFeeDistributed: bigint;
-  depositorShare: bigint;
-  treasuryShare: bigint;
-};
+export type LoanRecovered = { loanId: bigint; adminFeeDistributed: bigint };
 
 export type LoanRecoveredArgs = {
   loanId: number | bigint;
   adminFeeDistributed: number | bigint;
-  depositorShare: number | bigint;
-  treasuryShare: number | bigint;
 };
 
 export function getLoanRecoveredEncoder(): FixedSizeEncoder<LoanRecoveredArgs> {
   return getStructEncoder([
     ['loanId', getU64Encoder()],
     ['adminFeeDistributed', getU64Encoder()],
-    ['depositorShare', getU64Encoder()],
-    ['treasuryShare', getU64Encoder()],
   ]);
 }
 
@@ -44,8 +35,6 @@ export function getLoanRecoveredDecoder(): FixedSizeDecoder<LoanRecovered> {
   return getStructDecoder([
     ['loanId', getU64Decoder()],
     ['adminFeeDistributed', getU64Decoder()],
-    ['depositorShare', getU64Decoder()],
-    ['treasuryShare', getU64Decoder()],
   ]);
 }
 

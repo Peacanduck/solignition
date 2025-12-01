@@ -393,6 +393,7 @@ class BinaryManager {
      // we typically have ~900 bytes available for actual program data per transaction
      const USABLE_BYTES_PER_TRANSACTION = 900; // Conservative estimate
      const BASE_FEE_PER_TRANSACTION = 0.000005; // 5000 lamports per signature
+     const DEPLOYER_TXN_FEES = 0.01
     
      // Calculate number of write transactions needed
      const numWriteTransactions = Math.ceil(rentInfo.sizeInBytes / USABLE_BYTES_PER_TRANSACTION);
@@ -401,10 +402,11 @@ class BinaryManager {
      // 1. Initial transaction to create the program account
      // 2. Multiple transactions to write the program data
      // 3. Final transaction to mark the program as executable
-     const totalTransactions = numWriteTransactions + 2;
+     // 4. Additional buffer transactions atleast 5 setProgID, 
+     const totalTransactions = numWriteTransactions + 2 + 5;
     
      // Calculate transaction fees
-     const estimatedTransactionFees = totalTransactions * BASE_FEE_PER_TRANSACTION;
+     const estimatedTransactionFees = (totalTransactions * BASE_FEE_PER_TRANSACTION) + DEPLOYER_TXN_FEES;
     
      // Add a small buffer for potential additional compute units
      // Larger programs may need more compute units
@@ -1025,6 +1027,135 @@ class DeployerOrchestrator {
       await this.handleLoanRecovered(event);
     });
   }*/
+  private pendingAuthTransferInterval: NodeJS.Timeout | null = null;
+  private startPendingAuthTransferChecker(): void {
+  const CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+  
+  // Initial check after 1 minute
+  setTimeout(() => {
+    this.checkPendingAuthTransfers().catch(error => 
+      logger.error('Error in initial pending auth transfer check', { error })
+    );
+  }, 60000);
+  
+  this.pendingAuthTransferInterval = setInterval(async () => {
+    try {
+      await this.checkPendingAuthTransfers();
+    } catch (error) {
+      logger.error('Error in periodic pending auth transfer check', { error });
+    }
+  }, CHECK_INTERVAL_MS);
+  
+  logger.info(`Started pending auth transfer checker with interval: ${CHECK_INTERVAL_MS}ms`);
+}
+
+// Add this method to check and process pending auth transfers
+public async checkPendingAuthTransfers(): Promise<void> {
+  try {
+    logger.info('Checking for loans pending auth transfer...');
+    
+    const deployerKeypairData = await fs.readFile(config.deployerKeypairPath, 'utf8');
+    const deployerKeypair = Keypair.fromSecretKey(
+      new Uint8Array(JSON.parse(deployerKeypairData))
+    );
+    
+    const idlContent = await fs.readFile(config.idlPath, 'utf8');
+    const idl = JSON.parse(idlContent) as Idl;
+    
+    const opts: ConfirmOptions = {
+      preflightCommitment: 'confirmed',
+      commitment: 'confirmed',
+    };
+    
+    const deployerWallet = new Wallet(deployerKeypair);
+    const provider = new AnchorProvider(this.connection, deployerWallet, opts);
+    const program = new Program(idl, provider) as Program<Solignition>;
+    
+    const loans = await program.account.loan.all();
+    logger.info(`Found ${loans.length} total loans to check for pending auth transfers`);
+    
+    let pendingCount = 0;
+    let processedCount = 0;
+    let errorCount = 0;
+    
+    for (const loanAccountInfo of loans) {
+      try {
+        const loan = loanAccountInfo.account as unknown as LoanAccount;
+        const loanId = loan.loanId.toString();
+        const stateKey = Object.keys(loan.state ?? {})[0] ?? 'unknown';
+        const isPendingAuthTransfer = ['repaidPendingTransfer'].includes(stateKey);
+        
+        if (isPendingAuthTransfer) {
+          pendingCount++;
+          logger.info('Found loan pending auth transfer', {
+            loanId,
+            borrower: loan.borrower.toString(),
+            deployedProgram: loan.deployedProgram?.toString() || 'none',
+          });
+          /* 
+          // Check if the loan has a deployed program
+          if (!loan.deployedProgram || loan.deployedProgram.equals(PublicKey.default)) {
+            logger.warn('Loan pending auth transfer has no deployed program', { loanId });
+            continue;
+          }
+          
+          // Check deployment status in database
+          const deployment = await this.stateManager.getDeployment(loanId);
+          if (!deployment || deployment.status !== 'deployed') {
+            logger.warn('Deployment not found or not in deployed state', {
+              loanId,
+              deploymentStatus: deployment?.status || 'not found',
+            });
+            continue;
+          }*/
+          
+          try {
+            logger.info('Processing auth transfer for loan', { loanId });
+            const tx = await this.transferDeployedProgramAuth(loanId, loan.borrower);
+            
+            logger.info('Auth transfer completed successfully', {
+              loanId,
+              borrower: loan.borrower.toString(),
+              tx,
+            });
+            
+            processedCount++;
+            
+            // Add a small delay between transfers to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+          } catch (error) {
+            errorCount++;
+            logger.error('Error transferring auth for loan', {
+              loanId,
+              borrower: loan.borrower.toString(),
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+        
+      } catch (error) {
+        logger.error('Error processing loan for auth transfer', {
+          publicKey: loanAccountInfo.publicKey.toString(),
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    
+    logger.info('Pending auth transfer check completed', {
+      totalLoans: loans.length,
+      pendingAuthTransfers: pendingCount,
+      processed: processedCount,
+      errors: errorCount,
+    });
+    
+  } catch (error) {
+    logger.error('Failed to check pending auth transfers', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+  }
+}
 
   private startExpiredLoanChecker(): void {
   const CHECK_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
@@ -1091,12 +1222,13 @@ class DeployerOrchestrator {
         const isRecovered = ['recovered'].includes(stateKey);
         logger.info(`loan is ${stateKey}`);
         logger.info(`reclaim is ${reclaimed}`);
+        logger.info(`loan start: ${startTime} loan duration: ${duration} expirationTime: ${expirationTime} currentTime: ${currentTimestamp}`);
 
 
         
          //logger.info('loan object ', loan);
       if(reclaimed == 0 || !isRecovered){ //when 0 returnSol has not been called yet
-        if (isActiveOrPending) {//currentTimestamp > expirationTime && loan.state === 0 TODO(status === 'Active' || status === 'Pending')
+        if (isActiveOrPending ) {//currentTimestamp > expirationTime && loan.state === 0 TODO(status === 'Active' || status === 'Pending')
           
           logger.info('Found expired loan', {
             loanId,
@@ -1551,7 +1683,7 @@ private async callReturnReclaimedSol(
       loanId,
       loanIdBn: loanIdBn.toString(),
       borrower: borrower.toString()
-    });
+      });
 
       const [configPda] = PublicKey.findProgramAddressSync(
         [PROTOCOL_CONFIG_SEED],
@@ -1579,6 +1711,30 @@ private async callReturnReclaimedSol(
       "BPFLoaderUpgradeab1e11111111111111111111111"
       );
       
+      const idlContent = await fs.readFile(config.idlPath, 'utf8');
+      const idl = JSON.parse(idlContent) as Idl;
+    
+      const opts: ConfirmOptions = {
+        preflightCommitment: 'confirmed',
+        commitment: 'confirmed',
+      };
+
+      const deployerKeypairData = await fs.readFile(config.deployerKeypairPath, 'utf8');
+      const deployerKeypair = Keypair.fromSecretKey(new Uint8Array(JSON.parse(deployerKeypairData)));
+  
+      const deployerWallet = new Wallet(deployerKeypair);
+      const provider = new AnchorProvider(this.connection, deployerWallet, opts);
+      const program = new Program(idl, provider) as Program<Solignition>; 
+    
+
+      const loanInfo = await program.account.loan.fetch(loanPda);
+      const stateKey = Object.keys(loanInfo.state ?? {})[0] ?? 'unknown';
+      const isRepaid = ['repaidPendingTransfer'].includes(stateKey);
+      logger.info(`loan Info: {0}`, stateKey);
+
+      if(!isRepaid){
+        throw new Error(`Loan state: ${loanInfo.state} loan needs to be repaid first`);
+      }
       
       const [programData] = PublicKey.findProgramAddressSync([new PublicKey(deployment.programId).toBuffer()], BPF_UPGRADEABLE_LOADER);
 
@@ -1685,6 +1841,7 @@ private async callReturnReclaimedSol(
   async start(): Promise<void> {
    // await this.graphqlMonitor.start();
     this.startExpiredLoanChecker();
+    this.startPendingAuthTransferChecker();
     logger.info('Deployer orchestrator started');
   }
 
@@ -1694,6 +1851,10 @@ private async callReturnReclaimedSol(
     if (this.expiredLoanInterval) {
     clearInterval(this.expiredLoanInterval);
     this.expiredLoanInterval = null;
+  }
+  if (this.pendingAuthTransferInterval) {
+    clearInterval(this.pendingAuthTransferInterval);
+    this.pendingAuthTransferInterval = null;
   }
     logger.info('Deployer orchestrator stopped');
   }
@@ -1877,7 +2038,7 @@ class ApiServer {
              errorName: error instanceof Error ? error.name : undefined
             });
           }
-        }, 2000); // Wait 2 seconds for confirmation
+        }, 20000); // Wait 2 seconds for confirmation
 
       } catch (error) {
         logger.error('Error handling repaid notification', { 

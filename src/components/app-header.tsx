@@ -18,7 +18,7 @@ export function AppHeader({ links = [] }: { links: { label: string; path: string
     <header className="relative z-50 px-4 py-2 bg-card/50">
       <div className="mx-auto flex justify-between items-center">
         <div className="flex items-baseline gap-4">
-          <Link to="/" className="text-xl hover:text-neutral-500 dark:hover:text-white">
+          <Link to="https://www.solignition.xyz/" target="_blank" className="text-xl hover:text-neutral-500 dark:hover:text-white">
             <span>Solignition</span>
           </Link>
           <div className="hidden md:flex items-center">

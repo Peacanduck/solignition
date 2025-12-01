@@ -10,14 +10,11 @@ import {
   combineCodec,
   fixDecoderSize,
   fixEncoderSize,
-  getAddressEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getProgramDerivedAddress,
   getStructDecoder,
   getStructEncoder,
-  getU64Decoder,
-  getU64Encoder,
   transformEncoder,
   type AccountMeta,
   type AccountSignerMeta,
@@ -29,34 +26,27 @@ import {
   type InstructionWithAccounts,
   type InstructionWithData,
   type ReadonlyAccount,
+  type ReadonlySignerAccount,
   type ReadonlyUint8Array,
   type TransactionSigner,
   type WritableAccount,
-  type WritableSignerAccount,
 } from '@solana/kit';
 import { SOLIGNITION_PROGRAM_ADDRESS } from '../programs';
-import {
-  expectAddress,
-  expectSome,
-  getAccountMetaFactory,
-  type ResolvedAccount,
-} from '../shared';
+import { getAccountMetaFactory, type ResolvedAccount } from '../shared';
 
-export const REPAY_LOAN_DISCRIMINATOR = new Uint8Array([
-  224, 93, 144, 77, 61, 17, 137, 54,
+export const CLAIM_ADMIN_DISCRIMINATOR = new Uint8Array([
+  148, 173, 240, 143, 219, 57, 241, 136,
 ]);
 
-export function getRepayLoanDiscriminatorBytes() {
-  return fixEncoderSize(getBytesEncoder(), 8).encode(REPAY_LOAN_DISCRIMINATOR);
+export function getClaimAdminDiscriminatorBytes() {
+  return fixEncoderSize(getBytesEncoder(), 8).encode(CLAIM_ADMIN_DISCRIMINATOR);
 }
 
-export type RepayLoanInstruction<
+export type ClaimAdminInstruction<
   TProgram extends string = typeof SOLIGNITION_PROGRAM_ADDRESS,
-  TAccountBorrower extends string | AccountMeta<string> = string,
-  TAccountLoan extends string | AccountMeta<string> = string,
-  TAccountProtocolConfig extends string | AccountMeta<string> = string,
-  TAccountVault extends string | AccountMeta<string> = string,
+  TAccountAdmin extends string | AccountMeta<string> = string,
   TAccountAdminPda extends string | AccountMeta<string> = string,
+  TAccountProtocolConfig extends string | AccountMeta<string> = string,
   TAccountSystemProgram extends
     | string
     | AccountMeta<string> = '11111111111111111111111111111111',
@@ -67,22 +57,16 @@ export type RepayLoanInstruction<
   InstructionWithData<ReadonlyUint8Array> &
   InstructionWithAccounts<
     [
-      TAccountBorrower extends string
-        ? WritableSignerAccount<TAccountBorrower> &
-            AccountSignerMeta<TAccountBorrower>
-        : TAccountBorrower,
-      TAccountLoan extends string
-        ? WritableAccount<TAccountLoan>
-        : TAccountLoan,
-      TAccountProtocolConfig extends string
-        ? WritableAccount<TAccountProtocolConfig>
-        : TAccountProtocolConfig,
-      TAccountVault extends string
-        ? WritableAccount<TAccountVault>
-        : TAccountVault,
+      TAccountAdmin extends string
+        ? ReadonlySignerAccount<TAccountAdmin> &
+            AccountSignerMeta<TAccountAdmin>
+        : TAccountAdmin,
       TAccountAdminPda extends string
         ? WritableAccount<TAccountAdminPda>
         : TAccountAdminPda,
+      TAccountProtocolConfig extends string
+        ? ReadonlyAccount<TAccountProtocolConfig>
+        : TAccountProtocolConfig,
       TAccountSystemProgram extends string
         ? ReadonlyAccount<TAccountSystemProgram>
         : TAccountSystemProgram,
@@ -96,91 +80,73 @@ export type RepayLoanInstruction<
     ]
   >;
 
-export type RepayLoanInstructionData = {
-  discriminator: ReadonlyUint8Array;
-  loanId: bigint;
-};
+export type ClaimAdminInstructionData = { discriminator: ReadonlyUint8Array };
 
-export type RepayLoanInstructionDataArgs = { loanId: number | bigint };
+export type ClaimAdminInstructionDataArgs = {};
 
-export function getRepayLoanInstructionDataEncoder(): FixedSizeEncoder<RepayLoanInstructionDataArgs> {
+export function getClaimAdminInstructionDataEncoder(): FixedSizeEncoder<ClaimAdminInstructionDataArgs> {
   return transformEncoder(
-    getStructEncoder([
-      ['discriminator', fixEncoderSize(getBytesEncoder(), 8)],
-      ['loanId', getU64Encoder()],
-    ]),
-    (value) => ({ ...value, discriminator: REPAY_LOAN_DISCRIMINATOR })
+    getStructEncoder([['discriminator', fixEncoderSize(getBytesEncoder(), 8)]]),
+    (value) => ({ ...value, discriminator: CLAIM_ADMIN_DISCRIMINATOR })
   );
 }
 
-export function getRepayLoanInstructionDataDecoder(): FixedSizeDecoder<RepayLoanInstructionData> {
+export function getClaimAdminInstructionDataDecoder(): FixedSizeDecoder<ClaimAdminInstructionData> {
   return getStructDecoder([
     ['discriminator', fixDecoderSize(getBytesDecoder(), 8)],
-    ['loanId', getU64Decoder()],
   ]);
 }
 
-export function getRepayLoanInstructionDataCodec(): FixedSizeCodec<
-  RepayLoanInstructionDataArgs,
-  RepayLoanInstructionData
+export function getClaimAdminInstructionDataCodec(): FixedSizeCodec<
+  ClaimAdminInstructionDataArgs,
+  ClaimAdminInstructionData
 > {
   return combineCodec(
-    getRepayLoanInstructionDataEncoder(),
-    getRepayLoanInstructionDataDecoder()
+    getClaimAdminInstructionDataEncoder(),
+    getClaimAdminInstructionDataDecoder()
   );
 }
 
-export type RepayLoanAsyncInput<
-  TAccountBorrower extends string = string,
-  TAccountLoan extends string = string,
-  TAccountProtocolConfig extends string = string,
-  TAccountVault extends string = string,
+export type ClaimAdminAsyncInput<
+  TAccountAdmin extends string = string,
   TAccountAdminPda extends string = string,
+  TAccountProtocolConfig extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountEventAuthority extends string = string,
   TAccountProgram extends string = string,
 > = {
-  borrower: TransactionSigner<TAccountBorrower>;
-  loan?: Address<TAccountLoan>;
-  protocolConfig?: Address<TAccountProtocolConfig>;
-  vault?: Address<TAccountVault>;
+  admin: TransactionSigner<TAccountAdmin>;
   adminPda?: Address<TAccountAdminPda>;
+  protocolConfig?: Address<TAccountProtocolConfig>;
   systemProgram?: Address<TAccountSystemProgram>;
   eventAuthority?: Address<TAccountEventAuthority>;
   program: Address<TAccountProgram>;
-  loanId: RepayLoanInstructionDataArgs['loanId'];
 };
 
-export async function getRepayLoanInstructionAsync<
-  TAccountBorrower extends string,
-  TAccountLoan extends string,
-  TAccountProtocolConfig extends string,
-  TAccountVault extends string,
+export async function getClaimAdminInstructionAsync<
+  TAccountAdmin extends string,
   TAccountAdminPda extends string,
+  TAccountProtocolConfig extends string,
   TAccountSystemProgram extends string,
   TAccountEventAuthority extends string,
   TAccountProgram extends string,
   TProgramAddress extends Address = typeof SOLIGNITION_PROGRAM_ADDRESS,
 >(
-  input: RepayLoanAsyncInput<
-    TAccountBorrower,
-    TAccountLoan,
-    TAccountProtocolConfig,
-    TAccountVault,
+  input: ClaimAdminAsyncInput<
+    TAccountAdmin,
     TAccountAdminPda,
+    TAccountProtocolConfig,
     TAccountSystemProgram,
     TAccountEventAuthority,
     TAccountProgram
   >,
   config?: { programAddress?: TProgramAddress }
 ): Promise<
-  RepayLoanInstruction<
+  ClaimAdminInstruction<
     TProgramAddress,
-    TAccountBorrower,
-    TAccountLoan,
-    TAccountProtocolConfig,
-    TAccountVault,
+    TAccountAdmin,
     TAccountAdminPda,
+    TAccountProtocolConfig,
     TAccountSystemProgram,
     TAccountEventAuthority,
     TAccountProgram
@@ -191,11 +157,9 @@ export async function getRepayLoanInstructionAsync<
 
   // Original accounts.
   const originalAccounts = {
-    borrower: { value: input.borrower ?? null, isWritable: true },
-    loan: { value: input.loan ?? null, isWritable: true },
-    protocolConfig: { value: input.protocolConfig ?? null, isWritable: true },
-    vault: { value: input.vault ?? null, isWritable: true },
+    admin: { value: input.admin ?? null, isWritable: false },
     adminPda: { value: input.adminPda ?? null, isWritable: true },
+    protocolConfig: { value: input.protocolConfig ?? null, isWritable: false },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
     eventAuthority: { value: input.eventAuthority ?? null, isWritable: false },
     program: { value: input.program ?? null, isWritable: false },
@@ -205,17 +169,12 @@ export async function getRepayLoanInstructionAsync<
     ResolvedAccount
   >;
 
-  // Original args.
-  const args = { ...input };
-
   // Resolve default values.
-  if (!accounts.loan.value) {
-    accounts.loan.value = await getProgramDerivedAddress({
+  if (!accounts.adminPda.value) {
+    accounts.adminPda.value = await getProgramDerivedAddress({
       programAddress,
       seeds: [
-        getBytesEncoder().encode(new Uint8Array([108, 111, 97, 110])),
-        getU64Encoder().encode(expectSome(args.loanId)),
-        getAddressEncoder().encode(expectAddress(accounts.borrower.value)),
+        getBytesEncoder().encode(new Uint8Array([97, 100, 109, 105, 110])),
       ],
     });
   }
@@ -224,22 +183,6 @@ export async function getRepayLoanInstructionAsync<
       programAddress,
       seeds: [
         getBytesEncoder().encode(new Uint8Array([99, 111, 110, 102, 105, 103])),
-      ],
-    });
-  }
-  if (!accounts.vault.value) {
-    accounts.vault.value = await getProgramDerivedAddress({
-      programAddress,
-      seeds: [
-        getBytesEncoder().encode(new Uint8Array([118, 97, 117, 108, 116])),
-      ],
-    });
-  }
-  if (!accounts.adminPda.value) {
-    accounts.adminPda.value = await getProgramDerivedAddress({
-      programAddress,
-      seeds: [
-        getBytesEncoder().encode(new Uint8Array([97, 100, 109, 105, 110])),
       ],
     });
   }
@@ -264,82 +207,65 @@ export async function getRepayLoanInstructionAsync<
   const getAccountMeta = getAccountMetaFactory(programAddress, 'programId');
   return Object.freeze({
     accounts: [
-      getAccountMeta(accounts.borrower),
-      getAccountMeta(accounts.loan),
-      getAccountMeta(accounts.protocolConfig),
-      getAccountMeta(accounts.vault),
+      getAccountMeta(accounts.admin),
       getAccountMeta(accounts.adminPda),
+      getAccountMeta(accounts.protocolConfig),
       getAccountMeta(accounts.systemProgram),
       getAccountMeta(accounts.eventAuthority),
       getAccountMeta(accounts.program),
     ],
-    data: getRepayLoanInstructionDataEncoder().encode(
-      args as RepayLoanInstructionDataArgs
-    ),
+    data: getClaimAdminInstructionDataEncoder().encode({}),
     programAddress,
-  } as RepayLoanInstruction<
+  } as ClaimAdminInstruction<
     TProgramAddress,
-    TAccountBorrower,
-    TAccountLoan,
-    TAccountProtocolConfig,
-    TAccountVault,
+    TAccountAdmin,
     TAccountAdminPda,
+    TAccountProtocolConfig,
     TAccountSystemProgram,
     TAccountEventAuthority,
     TAccountProgram
   >);
 }
 
-export type RepayLoanInput<
-  TAccountBorrower extends string = string,
-  TAccountLoan extends string = string,
-  TAccountProtocolConfig extends string = string,
-  TAccountVault extends string = string,
+export type ClaimAdminInput<
+  TAccountAdmin extends string = string,
   TAccountAdminPda extends string = string,
+  TAccountProtocolConfig extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountEventAuthority extends string = string,
   TAccountProgram extends string = string,
 > = {
-  borrower: TransactionSigner<TAccountBorrower>;
-  loan: Address<TAccountLoan>;
-  protocolConfig: Address<TAccountProtocolConfig>;
-  vault: Address<TAccountVault>;
+  admin: TransactionSigner<TAccountAdmin>;
   adminPda: Address<TAccountAdminPda>;
+  protocolConfig: Address<TAccountProtocolConfig>;
   systemProgram?: Address<TAccountSystemProgram>;
   eventAuthority: Address<TAccountEventAuthority>;
   program: Address<TAccountProgram>;
-  loanId: RepayLoanInstructionDataArgs['loanId'];
 };
 
-export function getRepayLoanInstruction<
-  TAccountBorrower extends string,
-  TAccountLoan extends string,
-  TAccountProtocolConfig extends string,
-  TAccountVault extends string,
+export function getClaimAdminInstruction<
+  TAccountAdmin extends string,
   TAccountAdminPda extends string,
+  TAccountProtocolConfig extends string,
   TAccountSystemProgram extends string,
   TAccountEventAuthority extends string,
   TAccountProgram extends string,
   TProgramAddress extends Address = typeof SOLIGNITION_PROGRAM_ADDRESS,
 >(
-  input: RepayLoanInput<
-    TAccountBorrower,
-    TAccountLoan,
-    TAccountProtocolConfig,
-    TAccountVault,
+  input: ClaimAdminInput<
+    TAccountAdmin,
     TAccountAdminPda,
+    TAccountProtocolConfig,
     TAccountSystemProgram,
     TAccountEventAuthority,
     TAccountProgram
   >,
   config?: { programAddress?: TProgramAddress }
-): RepayLoanInstruction<
+): ClaimAdminInstruction<
   TProgramAddress,
-  TAccountBorrower,
-  TAccountLoan,
-  TAccountProtocolConfig,
-  TAccountVault,
+  TAccountAdmin,
   TAccountAdminPda,
+  TAccountProtocolConfig,
   TAccountSystemProgram,
   TAccountEventAuthority,
   TAccountProgram
@@ -349,11 +275,9 @@ export function getRepayLoanInstruction<
 
   // Original accounts.
   const originalAccounts = {
-    borrower: { value: input.borrower ?? null, isWritable: true },
-    loan: { value: input.loan ?? null, isWritable: true },
-    protocolConfig: { value: input.protocolConfig ?? null, isWritable: true },
-    vault: { value: input.vault ?? null, isWritable: true },
+    admin: { value: input.admin ?? null, isWritable: false },
     adminPda: { value: input.adminPda ?? null, isWritable: true },
+    protocolConfig: { value: input.protocolConfig ?? null, isWritable: false },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
     eventAuthority: { value: input.eventAuthority ?? null, isWritable: false },
     program: { value: input.program ?? null, isWritable: false },
@@ -362,9 +286,6 @@ export function getRepayLoanInstruction<
     keyof typeof originalAccounts,
     ResolvedAccount
   >;
-
-  // Original args.
-  const args = { ...input };
 
   // Resolve default values.
   if (!accounts.systemProgram.value) {
@@ -375,59 +296,51 @@ export function getRepayLoanInstruction<
   const getAccountMeta = getAccountMetaFactory(programAddress, 'programId');
   return Object.freeze({
     accounts: [
-      getAccountMeta(accounts.borrower),
-      getAccountMeta(accounts.loan),
-      getAccountMeta(accounts.protocolConfig),
-      getAccountMeta(accounts.vault),
+      getAccountMeta(accounts.admin),
       getAccountMeta(accounts.adminPda),
+      getAccountMeta(accounts.protocolConfig),
       getAccountMeta(accounts.systemProgram),
       getAccountMeta(accounts.eventAuthority),
       getAccountMeta(accounts.program),
     ],
-    data: getRepayLoanInstructionDataEncoder().encode(
-      args as RepayLoanInstructionDataArgs
-    ),
+    data: getClaimAdminInstructionDataEncoder().encode({}),
     programAddress,
-  } as RepayLoanInstruction<
+  } as ClaimAdminInstruction<
     TProgramAddress,
-    TAccountBorrower,
-    TAccountLoan,
-    TAccountProtocolConfig,
-    TAccountVault,
+    TAccountAdmin,
     TAccountAdminPda,
+    TAccountProtocolConfig,
     TAccountSystemProgram,
     TAccountEventAuthority,
     TAccountProgram
   >);
 }
 
-export type ParsedRepayLoanInstruction<
+export type ParsedClaimAdminInstruction<
   TProgram extends string = typeof SOLIGNITION_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    borrower: TAccountMetas[0];
-    loan: TAccountMetas[1];
+    admin: TAccountMetas[0];
+    adminPda: TAccountMetas[1];
     protocolConfig: TAccountMetas[2];
-    vault: TAccountMetas[3];
-    adminPda: TAccountMetas[4];
-    systemProgram: TAccountMetas[5];
-    eventAuthority: TAccountMetas[6];
-    program: TAccountMetas[7];
+    systemProgram: TAccountMetas[3];
+    eventAuthority: TAccountMetas[4];
+    program: TAccountMetas[5];
   };
-  data: RepayLoanInstructionData;
+  data: ClaimAdminInstructionData;
 };
 
-export function parseRepayLoanInstruction<
+export function parseClaimAdminInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>
-): ParsedRepayLoanInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 8) {
+): ParsedClaimAdminInstruction<TProgram, TAccountMetas> {
+  if (instruction.accounts.length < 6) {
     // TODO: Coded error.
     throw new Error('Not enough accounts');
   }
@@ -440,15 +353,13 @@ export function parseRepayLoanInstruction<
   return {
     programAddress: instruction.programAddress,
     accounts: {
-      borrower: getNextAccount(),
-      loan: getNextAccount(),
-      protocolConfig: getNextAccount(),
-      vault: getNextAccount(),
+      admin: getNextAccount(),
       adminPda: getNextAccount(),
+      protocolConfig: getNextAccount(),
       systemProgram: getNextAccount(),
       eventAuthority: getNextAccount(),
       program: getNextAccount(),
     },
-    data: getRepayLoanInstructionDataDecoder().decode(instruction.data),
+    data: getClaimAdminInstructionDataDecoder().decode(instruction.data),
   };
 }

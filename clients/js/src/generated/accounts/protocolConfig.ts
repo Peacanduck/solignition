@@ -61,8 +61,8 @@ export type ProtocolConfig = {
   adminFeeSplitBps: number;
   defaultInterestRateBps: number;
   defaultAdminFeeBps: number;
-  totalDeposits: bigint;
   totalLoansOutstanding: bigint;
+  totalShares: bigint;
   totalYieldDistributed: bigint;
   loanCounter: bigint;
   isPaused: boolean;
@@ -76,8 +76,8 @@ export type ProtocolConfigArgs = {
   adminFeeSplitBps: number;
   defaultInterestRateBps: number;
   defaultAdminFeeBps: number;
-  totalDeposits: number | bigint;
   totalLoansOutstanding: number | bigint;
+  totalShares: number | bigint;
   totalYieldDistributed: number | bigint;
   loanCounter: number | bigint;
   isPaused: boolean;
@@ -94,8 +94,8 @@ export function getProtocolConfigEncoder(): FixedSizeEncoder<ProtocolConfigArgs>
       ['adminFeeSplitBps', getU16Encoder()],
       ['defaultInterestRateBps', getU16Encoder()],
       ['defaultAdminFeeBps', getU16Encoder()],
-      ['totalDeposits', getU64Encoder()],
       ['totalLoansOutstanding', getU64Encoder()],
+      ['totalShares', getU64Encoder()],
       ['totalYieldDistributed', getU64Encoder()],
       ['loanCounter', getU64Encoder()],
       ['isPaused', getBooleanEncoder()],
@@ -114,8 +114,8 @@ export function getProtocolConfigDecoder(): FixedSizeDecoder<ProtocolConfig> {
     ['adminFeeSplitBps', getU16Decoder()],
     ['defaultInterestRateBps', getU16Decoder()],
     ['defaultAdminFeeBps', getU16Decoder()],
-    ['totalDeposits', getU64Decoder()],
     ['totalLoansOutstanding', getU64Decoder()],
+    ['totalShares', getU64Decoder()],
     ['totalYieldDistributed', getU64Decoder()],
     ['loanCounter', getU64Decoder()],
     ['isPaused', getBooleanDecoder()],

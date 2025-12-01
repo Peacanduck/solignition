@@ -124,7 +124,7 @@ describe("solignition", () => {
     it("should initialize the protocol successfully", async () => {
       const adminFeeSplitBps = 5000; // 50% to depositors, 50% to treasury
       const defaultInterestRateBps = 500; // 5%
-      const defaultAdminFeeBps = 100; // 1%
+      const defaultAdminFeeBps = 500; // 5%
 
       // Set up listener before sending transaction
    // const listenerId = program.addEventListener("ProtocolInitialized", event => {

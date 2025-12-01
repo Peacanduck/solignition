@@ -20,21 +20,21 @@ import {
   type FixedSizeEncoder,
 } from '@solana/kit';
 
-export type Withdrawn = {
+export type YieldClaimed = {
   depositor: Address;
   amount: bigint;
   sharesBurned: bigint;
   remainingShares: bigint;
 };
 
-export type WithdrawnArgs = {
+export type YieldClaimedArgs = {
   depositor: Address;
   amount: number | bigint;
   sharesBurned: number | bigint;
   remainingShares: number | bigint;
 };
 
-export function getWithdrawnEncoder(): FixedSizeEncoder<WithdrawnArgs> {
+export function getYieldClaimedEncoder(): FixedSizeEncoder<YieldClaimedArgs> {
   return getStructEncoder([
     ['depositor', getAddressEncoder()],
     ['amount', getU64Encoder()],
@@ -43,7 +43,7 @@ export function getWithdrawnEncoder(): FixedSizeEncoder<WithdrawnArgs> {
   ]);
 }
 
-export function getWithdrawnDecoder(): FixedSizeDecoder<Withdrawn> {
+export function getYieldClaimedDecoder(): FixedSizeDecoder<YieldClaimed> {
   return getStructDecoder([
     ['depositor', getAddressDecoder()],
     ['amount', getU64Decoder()],
@@ -52,6 +52,9 @@ export function getWithdrawnDecoder(): FixedSizeDecoder<Withdrawn> {
   ]);
 }
 
-export function getWithdrawnCodec(): FixedSizeCodec<WithdrawnArgs, Withdrawn> {
-  return combineCodec(getWithdrawnEncoder(), getWithdrawnDecoder());
+export function getYieldClaimedCodec(): FixedSizeCodec<
+  YieldClaimedArgs,
+  YieldClaimed
+> {
+  return combineCodec(getYieldClaimedEncoder(), getYieldClaimedDecoder());
 }

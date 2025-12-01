@@ -18,3 +18,4 @@ export * from './protocolInitialized';
 export * from './protocolPausedChanged';
 export * from './solReclaimed';
 export * from './withdrawn';
+export * from './yieldClaimed';
