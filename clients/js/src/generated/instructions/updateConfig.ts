@@ -87,6 +87,7 @@ export type UpdateConfigInstructionData = {
   defaultAdminFeeBps: Option<number>;
   deployer: Option<Address>;
   treasury: Option<Address>;
+  admin: Option<Address>;
 };
 
 export type UpdateConfigInstructionDataArgs = {
@@ -95,6 +96,7 @@ export type UpdateConfigInstructionDataArgs = {
   defaultAdminFeeBps: OptionOrNullable<number>;
   deployer: OptionOrNullable<Address>;
   treasury: OptionOrNullable<Address>;
+  admin: OptionOrNullable<Address>;
 };
 
 export function getUpdateConfigInstructionDataEncoder(): Encoder<UpdateConfigInstructionDataArgs> {
@@ -106,6 +108,7 @@ export function getUpdateConfigInstructionDataEncoder(): Encoder<UpdateConfigIns
       ['defaultAdminFeeBps', getOptionEncoder(getU16Encoder())],
       ['deployer', getOptionEncoder(getAddressEncoder())],
       ['treasury', getOptionEncoder(getAddressEncoder())],
+      ['admin', getOptionEncoder(getAddressEncoder())],
     ]),
     (value) => ({ ...value, discriminator: UPDATE_CONFIG_DISCRIMINATOR })
   );
@@ -119,6 +122,7 @@ export function getUpdateConfigInstructionDataDecoder(): Decoder<UpdateConfigIns
     ['defaultAdminFeeBps', getOptionDecoder(getU16Decoder())],
     ['deployer', getOptionDecoder(getAddressDecoder())],
     ['treasury', getOptionDecoder(getAddressDecoder())],
+    ['admin', getOptionDecoder(getAddressDecoder())],
   ]);
 }
 
@@ -147,6 +151,7 @@ export type UpdateConfigAsyncInput<
   defaultAdminFeeBps: UpdateConfigInstructionDataArgs['defaultAdminFeeBps'];
   deployer: UpdateConfigInstructionDataArgs['deployer'];
   treasury: UpdateConfigInstructionDataArgs['treasury'];
+  adminArg: UpdateConfigInstructionDataArgs['admin'];
 };
 
 export async function getUpdateConfigInstructionAsync<
@@ -188,7 +193,7 @@ export async function getUpdateConfigInstructionAsync<
   >;
 
   // Original args.
-  const args = { ...input };
+  const args = { ...input, admin: input.adminArg };
 
   // Resolve default values.
   if (!accounts.protocolConfig.value) {
@@ -249,6 +254,7 @@ export type UpdateConfigInput<
   defaultAdminFeeBps: UpdateConfigInstructionDataArgs['defaultAdminFeeBps'];
   deployer: UpdateConfigInstructionDataArgs['deployer'];
   treasury: UpdateConfigInstructionDataArgs['treasury'];
+  adminArg: UpdateConfigInstructionDataArgs['admin'];
 };
 
 export function getUpdateConfigInstruction<
@@ -288,7 +294,7 @@ export function getUpdateConfigInstruction<
   >;
 
   // Original args.
-  const args = { ...input };
+  const args = { ...input, admin: input.adminArg };
 
   const getAccountMeta = getAccountMetaFactory(programAddress, 'programId');
   return Object.freeze({

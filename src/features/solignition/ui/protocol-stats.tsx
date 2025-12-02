@@ -53,15 +53,15 @@ export function ProtocolStats({ address }: { address?: string }) {
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-4">
-      <Card>
+    <div className="grid gap-4 md:grid-cols-3">
+      {/*<Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">Total Deposits</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{formatSOL(config.totalDeposits)} SOL</div>
         </CardContent>
-      </Card>
+      </Card>*/}
 
       <Card>
         <CardHeader>

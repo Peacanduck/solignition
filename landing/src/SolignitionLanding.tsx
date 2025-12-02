@@ -659,7 +659,7 @@ const SolignitionLanding = () => {
                 title: "Advanced Features",
                 items: [
                   { text: "DAO governance implementation", icon: <Users className="w-4 h-4" /> },
-                  { text: "Secondary market for loan trading", icon: <TrendingUp className="w-4 h-4" /> },
+                 // { text: "Secondary market for loan trading", icon: <TrendingUp className="w-4 h-4" /> },
                   { text: "Advanced analytics dashboard", icon: <BarChart3 className="w-4 h-4" /> }
                 ],
                 status: "planned",
@@ -728,8 +728,21 @@ const SolignitionLanding = () => {
                 <div className="text-xl font-bold">Solignition</div>
                 <div className="text-sm text-slate-500">Built on Solana</div>
               </div>
+              {/* Social Icons */}
+              <div className="flex items-center space-x-3 ml-4">
+              {/* X / Twitter */}
+              <a href="https://x.com/Solignition" target="_blank" rel="noopener noreferrer" className="opacity-80 hover:opacity-100">
+              <svg viewBox="0 0 1200 1200" xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 fill-current">
+              <path d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.137 519.284H714.163ZM569.165 687.828L521.697 619.934L144.011 79.6944H306.615L611.412 515.685L658.88 583.579L1055.08 1150.3H892.476L569.165 687.854V687.828Z" fill="currentColor"/>
+              </svg>
+              </a>
+            {/* Discord */}
+             <a href="https://discord.gg/7yBEb7GUee" target="_blank" rel="noopener noreferrer" className="opacity-80 hover:opacity-100">
+            <img src="/Discord-Symbol-Blurple.svg" alt="Discord" className="h-4 w-4" />
+             </a>
+             </div>
             </div>
-            
+            {/* Navigation Links */}
             <div className="flex flex-wrap items-center justify-center gap-8 text-sm text-slate-400">
               <a href="#how-it-works" className="hover:text-white transition-colors">How It Works</a>
               <a href="#economics" className="hover:text-white transition-colors">Economics</a>
@@ -737,12 +750,13 @@ const SolignitionLanding = () => {
               {/*<a href="https://docs.solignition.xyz" className="hover:text-white transition-colors">Documentation</a>*/}
             </div>
           </div>
-          
+          {/* Copyright */}
           <div className="mt-8 pt-8 border-t border-slate-900 text-center">
             <p className="text-slate-500 text-sm">
-              © 2025 Solignition. All rights reserved. | DeFi / Web3 Infrastructure
+              © 2025 Solignition. All rights reserved.
             </p>
           </div>
+          
         </div>
       </footer>
     </div>

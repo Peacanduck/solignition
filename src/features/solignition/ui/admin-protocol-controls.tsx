@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { UiWalletAccount } from '@wallet-ui/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useProtocolConfig } from '../data-access/use-protocol-config'
 import { useInitializeProtocolMutation } from '../data-access/use-initialize-mutation'
+import { useClaimAdminMutation } from '../data-access/use-claim-admin-mutation'
 import { useSetPausedMutation } from '../data-access/use-set-paused-mutation'
 import { address } from '@solana/kit'
 
@@ -15,10 +16,22 @@ export function AdminProtocolControls({ account }: { account: UiWalletAccount })
   const [defaultInterestRate, setDefaultInterestRate] = useState('5')
   const [defaultAdminFee, setDefaultAdminFee] = useState('1')
   const [deployerAddress, setDeployerAddress] = useState('')
-
+  const claimAdminMutation = useClaimAdminMutation({ account })
   const configQuery = useProtocolConfig()
   const initializeMutation = useInitializeProtocolMutation({ account })
   const setPausedMutation = useSetPausedMutation({ account })
+
+  useEffect(() => {
+  if (configQuery.data) {
+    console.log('Protocol Config:', {
+      admin: configQuery.data.data.admin,
+      bump: configQuery.data.data.bump,
+      isPaused: configQuery.data.data.isPaused,
+    })
+    console.log('Current wallet:', account.address)
+    console.log('Addresses match:', configQuery.data.data.admin === account.address)
+  }
+}, [configQuery.data, account.address])
 
   const handleInitialize = async () => {
     if (!deployerAddress) return
@@ -34,6 +47,10 @@ export function AdminProtocolControls({ account }: { account: UiWalletAccount })
   const handleTogglePause = async () => {
     if (!configQuery.data) return
     await setPausedMutation.mutateAsync(!configQuery.data.data.isPaused)
+  }
+
+  const handleClaimAdmin = async () => {
+   await claimAdminMutation.mutateAsync()
   }
 
   if (configQuery.isLoading) {
@@ -171,6 +188,32 @@ export function AdminProtocolControls({ account }: { account: UiWalletAccount })
           </CardContent>
         </Card>
       )}
-    </div>
+
+      {/* Claim Yield Card */}
+
+{isInitialized && (
+<Card>
+<CardHeader>
+<CardTitle>Claim Admin Yield</CardTitle>
+<CardDescription>Withdraw accumulated admin fees from the protocol</CardDescription>
+</CardHeader>
+<CardContent className="space-y-4">
+<div className="space-y-2">
+<p className="text-sm text-muted-foreground">
+Claim all accumulated admin fees generated from loan interest and protocol operations.
+</p>
+</div>
+<Button onClick={handleClaimAdmin} disabled={claimAdminMutation.isPending} className="w-full">
+{claimAdminMutation.isPending ? 'Claiming...' : 'Claim Yield'}
+</Button>
+
+<p className="text-xs text-muted-foreground">
+This will transfer all unclaimed admin fees to the treasury wallet.
+</p>
+
+</CardContent>
+</Card>
+)}
+</div>
   )
 }

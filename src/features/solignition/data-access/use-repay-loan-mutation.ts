@@ -48,13 +48,13 @@ export function useRepayLoanMutation({ account }: { account: UiWalletAccount }) 
       })
 
         // Convert your addresses to PublicKey objects for the v1 Connection API
-const protocolConfigPubkey = new PublicKey(protocolConfig)
+const protocolConfigPubkey = new PublicKey(protocolConfig) 
 const vaultPubkey = new PublicKey(vault)
 const authorityPdaPubkey = new PublicKey(authorityPda)
 const loanAddressPubkey = new PublicKey(loanAddress)
 const programDataPubkey = new PublicKey(programData)
 
-      const connection = new Connection('http://127.0.0.1:8899')
+     /* const connection = new Connection(cluster.rpcUrl, 'confirmed'); 
 
 // 1. Check if all accounts exist
 const [protocolConfigInfo, vaultInfo, authorityInfo, loanInfo, programDataInfo] = await Promise.all([
@@ -81,7 +81,7 @@ if (protocolConfigInfo) {
       console.log('Vault:', vault)
       console.log('Authority PDA:', authorityPda)
       console.log('Loan Address:', loanAddress)
-      console.log('Program Data:', programData)
+      console.log('Program Data:', programData) */
       let signature = null;
       try {
         const instruction = await getRepayLoanInstructionAsync({

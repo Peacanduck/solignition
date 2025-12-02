@@ -84,6 +84,10 @@ export type Solignition = {
           }
         },
         {
+          "name": "treasury",
+          "writable": true
+        },
+        {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         },
@@ -1409,6 +1413,12 @@ export type Solignition = {
         },
         {
           "name": "treasury",
+          "type": {
+            "option": "pubkey"
+          }
+        },
+        {
+          "name": "admin",
           "type": {
             "option": "pubkey"
           }

@@ -19,6 +19,6 @@ signer "initiator" "svm::web_wallet" {
 }
 signer "deployer" "svm::squads" {
     multisig_account_public_key = "Cvu2Dvi7rLV9dnPgZWskab85NArsDr3h632UXtWfznNS"
-    initiator = signer.initiator
+    initiator = signer.initiator //signer.authority 
 }
 */

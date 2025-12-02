@@ -78,6 +78,10 @@
           }
         },
         {
+          "name": "treasury",
+          "writable": true
+        },
+        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         },
@@ -1403,6 +1407,12 @@
         },
         {
           "name": "treasury",
+          "type": {
+            "option": "pubkey"
+          }
+        },
+        {
+          "name": "admin",
           "type": {
             "option": "pubkey"
           }

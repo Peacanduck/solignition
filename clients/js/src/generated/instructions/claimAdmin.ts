@@ -47,6 +47,7 @@ export type ClaimAdminInstruction<
   TAccountAdmin extends string | AccountMeta<string> = string,
   TAccountAdminPda extends string | AccountMeta<string> = string,
   TAccountProtocolConfig extends string | AccountMeta<string> = string,
+  TAccountTreasury extends string | AccountMeta<string> = string,
   TAccountSystemProgram extends
     | string
     | AccountMeta<string> = '11111111111111111111111111111111',
@@ -67,6 +68,9 @@ export type ClaimAdminInstruction<
       TAccountProtocolConfig extends string
         ? ReadonlyAccount<TAccountProtocolConfig>
         : TAccountProtocolConfig,
+      TAccountTreasury extends string
+        ? WritableAccount<TAccountTreasury>
+        : TAccountTreasury,
       TAccountSystemProgram extends string
         ? ReadonlyAccount<TAccountSystemProgram>
         : TAccountSystemProgram,
@@ -111,6 +115,7 @@ export type ClaimAdminAsyncInput<
   TAccountAdmin extends string = string,
   TAccountAdminPda extends string = string,
   TAccountProtocolConfig extends string = string,
+  TAccountTreasury extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountEventAuthority extends string = string,
   TAccountProgram extends string = string,
@@ -118,6 +123,7 @@ export type ClaimAdminAsyncInput<
   admin: TransactionSigner<TAccountAdmin>;
   adminPda?: Address<TAccountAdminPda>;
   protocolConfig?: Address<TAccountProtocolConfig>;
+  treasury: Address<TAccountTreasury>;
   systemProgram?: Address<TAccountSystemProgram>;
   eventAuthority?: Address<TAccountEventAuthority>;
   program: Address<TAccountProgram>;
@@ -127,6 +133,7 @@ export async function getClaimAdminInstructionAsync<
   TAccountAdmin extends string,
   TAccountAdminPda extends string,
   TAccountProtocolConfig extends string,
+  TAccountTreasury extends string,
   TAccountSystemProgram extends string,
   TAccountEventAuthority extends string,
   TAccountProgram extends string,
@@ -136,6 +143,7 @@ export async function getClaimAdminInstructionAsync<
     TAccountAdmin,
     TAccountAdminPda,
     TAccountProtocolConfig,
+    TAccountTreasury,
     TAccountSystemProgram,
     TAccountEventAuthority,
     TAccountProgram
@@ -147,6 +155,7 @@ export async function getClaimAdminInstructionAsync<
     TAccountAdmin,
     TAccountAdminPda,
     TAccountProtocolConfig,
+    TAccountTreasury,
     TAccountSystemProgram,
     TAccountEventAuthority,
     TAccountProgram
@@ -160,6 +169,7 @@ export async function getClaimAdminInstructionAsync<
     admin: { value: input.admin ?? null, isWritable: false },
     adminPda: { value: input.adminPda ?? null, isWritable: true },
     protocolConfig: { value: input.protocolConfig ?? null, isWritable: false },
+    treasury: { value: input.treasury ?? null, isWritable: true },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
     eventAuthority: { value: input.eventAuthority ?? null, isWritable: false },
     program: { value: input.program ?? null, isWritable: false },
@@ -210,6 +220,7 @@ export async function getClaimAdminInstructionAsync<
       getAccountMeta(accounts.admin),
       getAccountMeta(accounts.adminPda),
       getAccountMeta(accounts.protocolConfig),
+      getAccountMeta(accounts.treasury),
       getAccountMeta(accounts.systemProgram),
       getAccountMeta(accounts.eventAuthority),
       getAccountMeta(accounts.program),
@@ -221,6 +232,7 @@ export async function getClaimAdminInstructionAsync<
     TAccountAdmin,
     TAccountAdminPda,
     TAccountProtocolConfig,
+    TAccountTreasury,
     TAccountSystemProgram,
     TAccountEventAuthority,
     TAccountProgram
@@ -231,6 +243,7 @@ export type ClaimAdminInput<
   TAccountAdmin extends string = string,
   TAccountAdminPda extends string = string,
   TAccountProtocolConfig extends string = string,
+  TAccountTreasury extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountEventAuthority extends string = string,
   TAccountProgram extends string = string,
@@ -238,6 +251,7 @@ export type ClaimAdminInput<
   admin: TransactionSigner<TAccountAdmin>;
   adminPda: Address<TAccountAdminPda>;
   protocolConfig: Address<TAccountProtocolConfig>;
+  treasury: Address<TAccountTreasury>;
   systemProgram?: Address<TAccountSystemProgram>;
   eventAuthority: Address<TAccountEventAuthority>;
   program: Address<TAccountProgram>;
@@ -247,6 +261,7 @@ export function getClaimAdminInstruction<
   TAccountAdmin extends string,
   TAccountAdminPda extends string,
   TAccountProtocolConfig extends string,
+  TAccountTreasury extends string,
   TAccountSystemProgram extends string,
   TAccountEventAuthority extends string,
   TAccountProgram extends string,
@@ -256,6 +271,7 @@ export function getClaimAdminInstruction<
     TAccountAdmin,
     TAccountAdminPda,
     TAccountProtocolConfig,
+    TAccountTreasury,
     TAccountSystemProgram,
     TAccountEventAuthority,
     TAccountProgram
@@ -266,6 +282,7 @@ export function getClaimAdminInstruction<
   TAccountAdmin,
   TAccountAdminPda,
   TAccountProtocolConfig,
+  TAccountTreasury,
   TAccountSystemProgram,
   TAccountEventAuthority,
   TAccountProgram
@@ -278,6 +295,7 @@ export function getClaimAdminInstruction<
     admin: { value: input.admin ?? null, isWritable: false },
     adminPda: { value: input.adminPda ?? null, isWritable: true },
     protocolConfig: { value: input.protocolConfig ?? null, isWritable: false },
+    treasury: { value: input.treasury ?? null, isWritable: true },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
     eventAuthority: { value: input.eventAuthority ?? null, isWritable: false },
     program: { value: input.program ?? null, isWritable: false },
@@ -299,6 +317,7 @@ export function getClaimAdminInstruction<
       getAccountMeta(accounts.admin),
       getAccountMeta(accounts.adminPda),
       getAccountMeta(accounts.protocolConfig),
+      getAccountMeta(accounts.treasury),
       getAccountMeta(accounts.systemProgram),
       getAccountMeta(accounts.eventAuthority),
       getAccountMeta(accounts.program),
@@ -310,6 +329,7 @@ export function getClaimAdminInstruction<
     TAccountAdmin,
     TAccountAdminPda,
     TAccountProtocolConfig,
+    TAccountTreasury,
     TAccountSystemProgram,
     TAccountEventAuthority,
     TAccountProgram
@@ -325,9 +345,10 @@ export type ParsedClaimAdminInstruction<
     admin: TAccountMetas[0];
     adminPda: TAccountMetas[1];
     protocolConfig: TAccountMetas[2];
-    systemProgram: TAccountMetas[3];
-    eventAuthority: TAccountMetas[4];
-    program: TAccountMetas[5];
+    treasury: TAccountMetas[3];
+    systemProgram: TAccountMetas[4];
+    eventAuthority: TAccountMetas[5];
+    program: TAccountMetas[6];
   };
   data: ClaimAdminInstructionData;
 };
@@ -340,7 +361,7 @@ export function parseClaimAdminInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>
 ): ParsedClaimAdminInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 6) {
+  if (instruction.accounts.length < 7) {
     // TODO: Coded error.
     throw new Error('Not enough accounts');
   }
@@ -356,6 +377,7 @@ export function parseClaimAdminInstruction<
       admin: getNextAccount(),
       adminPda: getNextAccount(),
       protocolConfig: getNextAccount(),
+      treasury: getNextAccount(),
       systemProgram: getNextAccount(),
       eventAuthority: getNextAccount(),
       program: getNextAccount(),

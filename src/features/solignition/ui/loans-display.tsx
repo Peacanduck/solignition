@@ -8,6 +8,25 @@ import { useRepayLoanMutation } from '../data-access/use-repay-loan-mutation'
 import { LoanState } from '@project/anchor'
 import { address } from '@solana/kit'
 
+function calculateInterest(
+  principal: bigint,
+  rateBps: bigint,
+  elapsedSeconds: bigint,
+  durationSeconds: bigint
+): bigint {
+  // Equivalent to Rust:
+  // interest = principal * rate_bps * elapsed_seconds / (10_000 * duration_seconds)
+  const numerator = principal * rateBps * elapsedSeconds;
+  const denominator = 10_000n * durationSeconds;
+
+  if (denominator === 0n) {
+    throw new Error("durationSeconds cannot be zero");
+  }
+
+  return numerator / denominator;
+}
+
+
 export function LoansDisplay({ account }: { account: UiWalletAccount }) {
   const loansQuery = useLoans(address(account.address))
   const repayMutation = useRepayLoanMutation({ account })
@@ -21,7 +40,7 @@ export function LoansDisplay({ account }: { account: UiWalletAccount }) {
   })
 
   const formatSOL = (lamports: bigint) => {
-    return (Number(lamports) / 1_000_000_000).toFixed(4)
+    return (Number(lamports) / 1_000_000_000).toFixed(6)
   }
 
   const formatDate = (timestamp: bigint) => {
@@ -45,8 +64,8 @@ export function LoansDisplay({ account }: { account: UiWalletAccount }) {
     }
   }
 
-  const calculateTotalOwed = (principal: bigint, interestRateBps: number) => {
-    const interest = (principal * BigInt(interestRateBps)) / 10000n
+  const calculateTotalOwed = (principal: bigint, interestRateBps: bigint, elapased: bigint, duration: bigint ) => {
+    const interest = calculateInterest(principal,interestRateBps, elapased, duration);
     return principal + interest
   }
 
@@ -89,7 +108,8 @@ export function LoansDisplay({ account }: { account: UiWalletAccount }) {
       <div className="grid gap-4">
         {loansQuery.data.map((loan) => {
           console.log("loan data: ", loan)
-          const totalOwed = calculateTotalOwed(loan.data.principal, loan.data.interestRateBps)
+          const NowTimestampSeconds = BigInt(Math.floor(Date.now() / 1000))
+          const totalOwed = calculateTotalOwed(loan.data.principal, BigInt(loan.data.interestRateBps), BigInt(NowTimestampSeconds - loan.data.startTs), loan.data.duration);
           const isActive = loan.data.state === LoanState.Active
 
           return (
@@ -132,12 +152,15 @@ export function LoansDisplay({ account }: { account: UiWalletAccount }) {
                     <p className="text-lg font-semibold">{(loan.data.interestRateBps / 100).toFixed(1)}%</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Total Owed</p>
+                    <p className="text-sm text-muted-foreground">Current Owed</p>
                     <p className="text-lg font-semibold">{formatSOL(totalOwed)} SOL</p>
+                    
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Start Date</p>
                     <p className="text-lg font-semibold">{formatDate(loan.data.startTs)}</p>
+                    <p className="text-sm text-muted-foreground">Expires</p>
+                    <p className="text-lg font-semibold">{formatDate(loan.data.startTs + loan.data.duration)}</p>
                   </div>
                 </div>
 

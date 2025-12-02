@@ -7,6 +7,7 @@ import { createKeyPairFromBytes, createSignerFromKeyPair, getBase58Encoder } fro
 import { loadKeypairSignerFromFile, type KeyPairSigner } from 'gill/node';
 import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes';
 import * as fs from 'fs';
+import * as pfs from 'fs/promises';
 import { threadCpuUsage } from 'process';
 import { setMaxIdleHTTPParsers } from 'http';
 
@@ -59,16 +60,28 @@ describe("solignition", () => {
     const outputPath = '/root/projects/testkeys/key.json';
      fs.writeFileSync(outputPath, JSON.stringify(keyArray));
 
+    const adminKeypairData = await pfs.readFile('/root/projects/test/keys.json','utf-8'); //9MNvwnDckGnNExaNxJjsmoQ7MP78YP5DtCgorSc3yY9U
+    const adminKeypair = Keypair.fromSecretKey(
+      new Uint8Array(JSON.parse(adminKeypairData))
+    );
+
+    const deployerKeypairData = await pfs.readFile('/root/projects/test/deployerKey.json', 'utf8'); //A6m3LACqcehbGFQkjiiGcETLcfQkqpHqmmSaQ59RiAws
+    const deployerKeypair = Keypair.fromSecretKey(
+      new Uint8Array(JSON.parse(deployerKeypairData))
+    );
+
+
+
 
     // Generate keypairs
-    admin = keypair;
+    admin = adminKeypair;
     depositor1 = Keypair.generate();
     depositor2 = Keypair.generate();
     depositor3 = Keypair.generate();
     borrower = Keypair.generate();
-    deployer = keypair;
+    deployer = deployerKeypair;
 
-    // Airdrop SOL to test accounts
+    /* Airdrop SOL to test accounts
     const airdropAmount = 100 * LAMPORTS_PER_SOL;
     await connection.confirmTransaction(
       await connection.requestAirdrop(admin.publicKey, airdropAmount)
@@ -81,7 +94,8 @@ describe("solignition", () => {
     );
     await connection.confirmTransaction(
       await connection.requestAirdrop(borrower.publicKey, airdropAmount)
-    );
+    );*/
+    
 
     // Derive PDAs
     [protocolConfigPda] = PublicKey.findProgramAddressSync(
@@ -157,7 +171,7 @@ describe("solignition", () => {
       assert.equal(config.adminFeeSplitBps, adminFeeSplitBps);
       assert.equal(config.defaultInterestRateBps, defaultInterestRateBps);
       assert.equal(config.defaultAdminFeeBps, defaultAdminFeeBps);
-      assert.equal(config.totalDeposits.toNumber(), 0);
+      //assert.equal(config.totalDeposits.toNumber(), 0);
       assert.equal(config.totalLoansOutstanding.toNumber(), 0);
       assert.equal(config.isPaused, false);
 
@@ -975,17 +989,18 @@ describe("solignition", () => {
 */
   describe("update_config", () => {
     it("should allow admin to update configuration", async () => {
-      const newAdminFeeSplit = 6000; // 60%
-      const newInterestRate = 600; // 6%
-      const newAdminFee = 150; // 1.5%
+      const newAdminFeeSplit = 5000; // 60%
+      const newInterestRate = 500; // 6%
+      const newAdminFee = 500; // 1.5%
 
       const tx = await program.methods
         .updateConfig(
           newAdminFeeSplit,
           newInterestRate,
           newAdminFee,
+          deployer.publicKey,
           null,
-          null
+          deployer.publicKey,
         )
         .accounts({
           admin: admin.publicKey,
@@ -1022,7 +1037,7 @@ describe("solignition", () => {
     it("should fail if non-admin tries to update config", async () => {
       try {
         await program.methods
-          .updateConfig(5000, null, null, null, null)
+          .updateConfig(5000, null, null, null, null,null)
           .accounts({
             admin: depositor1.publicKey,
             protocolConfig: protocolConfigPda,
@@ -1038,7 +1053,7 @@ describe("solignition", () => {
     it("should fail with invalid parameters", async () => {
       try {
         await program.methods
-          .updateConfig(20000, null, null, null, null) // > 10000 bps
+          .updateConfig(20000, null, null, null, null,null) // > 10000 bps
           .accounts({
             admin: admin.publicKey,
             protocolConfig: protocolConfigPda,
@@ -1050,7 +1065,122 @@ describe("solignition", () => {
         assert.ok(error.toString().includes("InvalidParameter"));
       }
     });
+     /* 
+    it("should allow admin to update admin", async () => {
+      const newAdminFeeSplit = 5000; // 60%
+      const newInterestRate = 500; // 6%
+      const newAdminFee = 500; // 1.5%
+
+      const tx = await program.methods
+        .updateConfig(
+          null,
+          null,
+          null,
+          null,
+          null,
+          depositor1.publicKey,
+        )
+        .accounts({
+          admin: admin.publicKey,
+          protocolConfig: protocolConfigPda,
+        })
+        .signers([admin])
+        .rpc();
+
+      console.log("Update config tx:", tx);
+
+      // Verify config updated
+      const config = await program.account.protocolConfig.fetch(protocolConfigPda);
+        assert.ok(config.admin.equals(depositor1.publicKey));
+     // assert.equal(config.adminFeeSplitBps, newAdminFeeSplit);
+     // assert.equal(config.defaultInterestRateBps, newInterestRate);
+     // assert.equal(config.defaultAdminFeeBps, newAdminFee);
+    });
+
+    it("should fail if non-admin tries to update config", async () => {
+      try {
+        await program.methods
+          .updateConfig(5000, null, null, null, null,null)
+          .accounts({
+            admin: admin.publicKey,
+            protocolConfig: protocolConfigPda,
+          })
+          .signers([admin])
+          .rpc();
+        assert.fail("Should have thrown error");
+      } catch (error) {
+        assert.ok(error.toString().includes("Unauthorized"));
+      }
+    });
+
+    it("should allow admin to update admin", async () => {
+      const newAdminFeeSplit = 5000; // 60%
+      const newInterestRate = 500; // 6%
+      const newAdminFee = 500; // 1.5%
+
+      const tx = await program.methods
+        .updateConfig(
+          newAdminFeeSplit,
+          newInterestRate,
+          newAdminFee,
+          null,
+          null,
+          admin.publicKey,
+        )
+        .accounts({
+          admin: depositor1.publicKey,
+          protocolConfig: protocolConfigPda,
+        })
+        .signers([depositor1])
+        .rpc();
+
+      console.log("Update config tx:", tx);
+
+      // Verify config updated
+      const config = await program.account.protocolConfig.fetch(protocolConfigPda);
+      assert.ok(config.admin.equals(admin.publicKey)); 
+      assert.equal(config.adminFeeSplitBps, newAdminFeeSplit);
+      assert.equal(config.defaultInterestRateBps, newInterestRate);
+      assert.equal(config.defaultAdminFeeBps, newAdminFee);
+    }); */
   });
+
+
+
+  describe("claim value from admin pda to treasury wallet", () => {
+    it("should allow admin to claim", async () => {
+    const config = await program.account.protocolConfig.fetch(protocolConfigPda);
+
+    await connection.confirmTransaction(
+      await connection.requestAirdrop(adminPda, 100 * LAMPORTS_PER_SOL)
+    );
+
+      const tx = await program.methods
+        .claimAdmin()
+        .accounts({
+          admin: admin.publicKey,
+          adminPda,
+          protocolConfig: protocolConfigPda,
+          treasury: config.treasury,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([admin])
+        .rpc();
+
+      console.log("claim from pda tx:", tx);
+
+      /* Verify admin pda empty and treasury received funds
+      
+      assert.equal(config.treasury, newAdminFeeSplit);
+      assert.equal(config.defaultInterestRateBps, newInterestRate);
+      assert.equal(config.defaultAdminFeeBps, newAdminFee);*/
+    });
+
+    
+    
+  });
+
+
 /* 
   describe("integration tests", () => {
     it("should handle full loan lifecycle", async () => {

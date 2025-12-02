@@ -211,7 +211,7 @@ pub mod solignition {
             &ix,
             &[
                 ctx.accounts.admin_pda.to_account_info(),
-                ctx.accounts.protocol_config.to_account_info(),
+                ctx.accounts.treasury.to_account_info(),
                 ctx.accounts.system_program.to_account_info(),
             ],
             signer,
@@ -358,7 +358,7 @@ pub mod solignition {
         let config = &mut ctx.accounts.protocol_config;
 
         require!(duration > 0, ErrorCode::InvalidDuration);
-        require!(interest_rate_bps <= 10000, ErrorCode::InvalidInterestRate);
+        require!(interest_rate_bps <= 10000 && interest_rate_bps >= config.default_interest_rate_bps, ErrorCode::InvalidInterestRate);
         require!(admin_fee_bps <= 10000 && admin_fee_bps >= config.default_admin_fee_bps , ErrorCode::InvalidAdminFee);
 
         //require!(ctx.accounts.protocol_config.loan_counter == , ErrorCode::InvalidLoanCounter);
@@ -763,6 +763,7 @@ pub fn transfer_authority_to_borrower(
         default_admin_fee_bps: Option<u16>,
         deployer: Option<Pubkey>,
         treasury: Option<Pubkey>,
+        admin: Option<Pubkey>,
     ) -> Result<()> {
         let config = &mut ctx.accounts.protocol_config;
         
@@ -788,6 +789,10 @@ pub fn transfer_authority_to_borrower(
         if let Some(treasury) = treasury {
             config.treasury = treasury;
         }
+
+        if let Some(admin) = admin {
+            config.admin = admin;
+        }
         
         emit_cpi!(ConfigUpdated {
             admin_fee_split_bps: config.admin_fee_split_bps,
@@ -806,7 +811,7 @@ fn calculate_interest(principal: u64, rate_bps: u16, elapsed_seconds: u64, durat
         .unwrap()
         .checked_mul(elapsed_seconds as u128)
         .unwrap()
-        .checked_div(10_000u128 * duration_seconds as u128) // was SECONDS_PER_YEAR for apy
+        .checked_div(10_000u128 * duration_seconds as u128) // was SECONDS_PER_YEAR for apy now duration of loan
         .unwrap();
     
     interest as u64
@@ -999,12 +1004,13 @@ pub struct Withdraw<'info> {
 pub struct ClaimAdmin<'info> {
     pub admin: Signer<'info>,
 
+    /// CHECK: admin pda
     #[account(
         mut,
         seeds = [ADMIN_SEED],
         bump
     )]
-    pub admin_pda: SystemAccount<'info>,
+    pub admin_pda: AccountInfo<'info>,
     
     #[account(
         seeds = [PROTOCOL_CONFIG_SEED],
@@ -1013,41 +1019,16 @@ pub struct ClaimAdmin<'info> {
     )]
     pub protocol_config: Account<'info, ProtocolConfig>,
 
+    #[account(
+        mut,
+        address = protocol_config.treasury
+    )]
+    /// CHECK: treasury wallet
+    pub treasury: AccountInfo<'info>,
+
     pub system_program: Program<'info, System>,
 }
-/* 
-#[event_cpi]
-#[derive(Accounts)]
-pub struct ClaimAdmin<'info> {
-    #[account(mut)]
-    pub admin: Signer<'info>,
-    
-    #[account(
-        mut,
-        seeds = [DEPOSITOR_SEED, depositor.key().as_ref()],
-        bump = depositor_record.bump,
-        constraint = depositor_record.owner == depositor.key() @ ErrorCode::UnauthorizedDepositor
-    )]
-    pub depositor_record: Account<'info, DepositorRecord>,
-    
-    #[account(
-        mut,
-        seeds = [PROTOCOL_CONFIG_SEED],
-        bump = protocol_config.bump
-    )]
-    pub protocol_config: Account<'info, ProtocolConfig>,
-    
-    /// CHECK: Vault PDA
-    #[account(
-        mut,
-        seeds = [VAULT_SEED],
-        bump
-    )]
-    pub vault: AccountInfo<'info>,
-    
-    pub system_program: Program<'info, System>,
-}
-*/
+
 #[event_cpi]
 #[derive(Accounts)]
 //#[instruction(loan_id: u64)]
@@ -1458,31 +1439,31 @@ pub struct YieldClaimed {
 
 #[error_code]
 pub enum ErrorCode {
-    #[msg("Protocol is currently paused")]
+    #[msg("Protocol is currently paused")]  //0
     ProtocolPaused,
-    #[msg("Invalid amount provided")]
+    #[msg("Invalid amount provided")] //1
     InvalidAmount,
-    #[msg("Insufficient balance")]
+    #[msg("Insufficient balance")] //2
     InsufficientBalance,
-    #[msg("Insufficient liquidity in vault")]
+    #[msg("Insufficient liquidity in vault")] //3
     InsufficientLiquidity,
-    #[msg("Invalid duration")]
+    #[msg("Invalid duration")] //4
     InvalidDuration,
-    #[msg("Invalid interest rate")]
+    #[msg("Invalid interest rate")] //5
     InvalidInterestRate,
-    #[msg("Invalid admin fee")]
+    #[msg("Invalid admin fee")] //6
     InvalidAdminFee,
-    #[msg("Loan is not active")]
+    #[msg("Loan is not active")]    //7 
     LoanNotActive,
-    #[msg("Unauthorized borrower")]
+    #[msg("Unauthorized borrower")]   //8
     UnauthorizedBorrower,
-    #[msg("Loan has not expired yet")]
+    #[msg("Loan has not expired yet")]  //9
     LoanNotExpired,
-    #[msg("Loan has not been recovered")]
+    #[msg("Loan has not been recovered")] //10
     LoanNotRecovered,
-    #[msg("Loan has not been repaid")]
+    #[msg("Loan has not been repaid")] //11
     LoanNotRepaid,
-    #[msg("Unauthorized action")]
+    #[msg("Unauthorized action")]  //12
     Unauthorized,
     #[msg("Invalid parameter")]
     InvalidParameter,

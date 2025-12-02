@@ -1028,6 +1028,174 @@ class DeployerOrchestrator {
     });
   }*/
   private pendingAuthTransferInterval: NodeJS.Timeout | null = null;
+  private pendingLoansDeploymentInterval: NodeJS.Timeout | null = null;
+
+  private startPendingLoansDeploymentChecker(): void {
+  const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 10 minutes
+  
+  // Initial check after 1 minute
+  setTimeout(() => {
+    this.checkPendingLoansForDeployment().catch(error => 
+      logger.error('Error in initial pending loans deployment check', { error })
+    );
+  }, 60000);
+  
+  this.pendingLoansDeploymentInterval = setInterval(async () => {
+    try {
+      await this.checkPendingLoansForDeployment();
+    } catch (error) {
+      logger.error('Error in periodic pending loans deployment check', { error });
+    }
+  }, CHECK_INTERVAL_MS);
+  
+  logger.info(`Started pending loans deployment checker with interval: ${CHECK_INTERVAL_MS}ms`);
+}
+
+// Main method to check and set deployed programs for pending loans
+public async checkPendingLoansForDeployment(): Promise<void> {
+  try {
+    logger.info('Checking for pending loans needing deployed program set...');
+    
+    const deployerKeypairData = await fs.readFile(config.deployerKeypairPath, 'utf8');
+    const deployerKeypair = Keypair.fromSecretKey(
+      new Uint8Array(JSON.parse(deployerKeypairData))
+    );
+    
+    const idlContent = await fs.readFile(config.idlPath, 'utf8');
+    const idl = JSON.parse(idlContent) as Idl;
+    
+    const opts: ConfirmOptions = {
+      preflightCommitment: 'confirmed',
+      commitment: 'confirmed',
+    };
+    
+    const deployerWallet = new Wallet(deployerKeypair);
+    const provider = new AnchorProvider(this.connection, deployerWallet, opts);
+    const program = new Program(idl, provider) as Program<Solignition>;
+    
+    const loans = await program.account.loan.all();
+    logger.info(`Found ${loans.length} total loans to check for pending deployments`);
+    
+    let pendingCount = 0;
+    let processedCount = 0;
+    let errorCount = 0;
+    
+    for (const loanAccountInfo of loans) {
+      try {
+        const loan = loanAccountInfo.account as unknown as LoanAccount;
+        const loanId = loan.loanId.toString();
+        const stateKey = Object.keys(loan.state ?? {})[0] ?? 'unknown';
+        const isPending = stateKey === 'pending';
+        
+        if (isPending) {
+          pendingCount++;
+          
+          // Check if loan already has a deployed program set
+          const hasDeployedProgram = loan.deployedProgram && !loan.deployedProgram.equals(PublicKey.default);
+          
+          
+          
+          if (hasDeployedProgram) {
+            logger.debug('Loan already has deployed program set', {
+              loanId,
+              deployedProgram: loan.deployedProgram.toString(),
+            });
+            continue;
+          }
+          
+          logger.info('Found pending loan without set deployed program', {
+            loanId,
+            borrower: loan.borrower.toString(),
+          });
+          
+          // Check if we have a deployment record with a program ID
+          const deployment = await this.stateManager.getDeployment(loanId);
+          
+          if (!deployment) {
+            logger.debug('No deployment record found for pending loan', { loanId });
+            continue;
+          }
+          
+          if (!deployment.programId) {
+            logger.debug('Deployment record exists but no programId', {
+              loanId,
+              deploymentStatus: deployment.status,
+            });
+            
+            continue;
+          }
+          
+          if (deployment.status !== 'deployed') {
+            logger.debug('Deployment not in deployed status', {
+              loanId,
+              deploymentStatus: deployment.status,
+            });
+            continue;
+          }
+          
+          try {
+            logger.info('Setting deployed program for pending loan', {
+              loanId,
+              programId: deployment.programId,
+              borrower: loan.borrower.toString(),
+            });
+            
+            const tx = await this.setDeployedProgram(
+              loanId,
+              new PublicKey(deployment.programId),
+              loan.borrower
+            );
+            
+            logger.info('Successfully set deployed program', {
+              loanId,
+              programId: deployment.programId,
+              tx,
+            });
+            
+            // Update deployment record with the transaction signature
+            deployment.setDeployedTxSignature = tx;
+            deployment.updatedAt = Date.now();
+            await this.stateManager.saveDeployment(deployment);
+            
+            processedCount++;
+            
+            // Add a small delay between transactions to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            
+          } catch (error) {
+            errorCount++;
+            logger.error('Error setting deployed program for loan', {
+              loanId,
+              programId: deployment.programId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+        
+      } catch (error) {
+        logger.error('Error processing loan for deployment check', {
+          publicKey: loanAccountInfo.publicKey.toString(),
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    
+    logger.info('Pending loans deployment check completed', {
+      totalLoans: loans.length,
+      pendingLoans: pendingCount,
+      processed: processedCount,
+      errors: errorCount,
+    });
+    
+  } catch (error) {
+    logger.error('Failed to check pending loans for deployment', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+  }
+}
+
+
   private startPendingAuthTransferChecker(): void {
   const CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
   
@@ -1228,7 +1396,7 @@ public async checkPendingAuthTransfers(): Promise<void> {
         
          //logger.info('loan object ', loan);
       if(reclaimed == 0 || !isRecovered){ //when 0 returnSol has not been called yet
-        if (isActiveOrPending ) {//currentTimestamp > expirationTime && loan.state === 0 TODO(status === 'Active' || status === 'Pending')
+        if (isActiveOrPending && currentTimestamp > expirationTime) { // 
           
           logger.info('Found expired loan', {
             loanId,
@@ -1668,6 +1836,10 @@ private async callReturnReclaimedSol(
     let setTx = null;
     try {
       setTx = await this.setDeployedProgram(loanId, new PublicKey(programId), new PublicKey(borrower));
+
+      deployment.setDeployedTxSignature = setTx;
+      deployment.updatedAt = Date.now();
+      await this.stateManager.saveDeployment(deployment);
       
     } catch (error) {
       logger.info('failed to set deployed program in contract', {loanId, programId, borrower });
@@ -1842,6 +2014,7 @@ private async callReturnReclaimedSol(
    // await this.graphqlMonitor.start();
     this.startExpiredLoanChecker();
     this.startPendingAuthTransferChecker();
+    this.startPendingLoansDeploymentChecker();
     logger.info('Deployer orchestrator started');
   }
 
@@ -1855,6 +2028,11 @@ private async callReturnReclaimedSol(
   if (this.pendingAuthTransferInterval) {
     clearInterval(this.pendingAuthTransferInterval);
     this.pendingAuthTransferInterval = null;
+  }
+
+  if (this.pendingLoansDeploymentInterval) { 
+    clearInterval(this.pendingLoansDeploymentInterval);
+    this.pendingLoansDeploymentInterval = null;
   }
     logger.info('Deployer orchestrator stopped');
   }

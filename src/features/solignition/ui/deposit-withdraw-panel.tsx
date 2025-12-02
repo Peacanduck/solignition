@@ -78,7 +78,7 @@ export function DepositWithdrawPanel({ account }: { account: UiWalletAccount }) 
   // derived data
   const shareAmount = depositorQuery.data?.data.shareAmount ?? 0n
   const depositedAmount = amountForShares(shareAmount) ?? 0n
-  const totalDeposits = configQuery.data?.data.totalDeposits ?? 0n
+ // const totalDeposits = configQuery.data?.data.totalDeposits ?? 0n
   const totalYieldDistributed = configQuery.data?.data.totalYieldDistributed ?? 0n
   const totalLoansOutstanding = configQuery.data?.data.totalLoansOutstanding ?? 0n
   
@@ -223,7 +223,7 @@ export function DepositWithdrawPanel({ account }: { account: UiWalletAccount }) 
             <CardDescription>Live protocol metrics</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-4 ">
+            <div className="grid grid-cols-2 gap-4  ">
               <div>
                 <div className="text-xs text-muted-foreground">Vault Balance</div>
                 <div className="font-medium">{formatSOL(vaultBalance, 6)} SOL</div>
