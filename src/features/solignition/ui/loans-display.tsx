@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AppExplorerLink } from '@/components/app-explorer-link'
-import { useLoans, useLoansByBorrower } from '../data-access/use-loans'
+import { useLoans } from '../data-access/use-loans'
 import { useRepayLoanMutation } from '../data-access/use-repay-loan-mutation'
 import { LoanState } from '@project/anchor'
 import { address } from '@solana/kit'
@@ -58,7 +58,7 @@ export function LoansDisplay({ account }: { account: UiWalletAccount }) {
       case LoanState.Pending:
         return <Badge variant="destructive">Pending</Badge>
       case LoanState.RepaidPendingTransfer:
-        return <Badge variant="bg-green-500">Pending transfer</Badge>
+        return <Badge variant="default" className="bg-green-500 text-white">Pending transfer</Badge>
       default:
         return <Badge variant="outline">Unknown</Badge>
     }
@@ -111,6 +111,7 @@ export function LoansDisplay({ account }: { account: UiWalletAccount }) {
           const NowTimestampSeconds = BigInt(Math.floor(Date.now() / 1000))
           const totalOwed = calculateTotalOwed(loan.data.principal, BigInt(loan.data.interestRateBps), BigInt(NowTimestampSeconds - loan.data.startTs), loan.data.duration);
           const isActive = loan.data.state === LoanState.Active
+          const repaidTs = loan.data.repaidTs.__option === "Some" ? loan.data.repaidTs.value : 0n;
 
           return (
             <Card key={loan.address}>
@@ -176,7 +177,7 @@ export function LoansDisplay({ account }: { account: UiWalletAccount }) {
 
                 {loan.data.repaidTs && (
                   <div className="mt-2 text-sm text-muted-foreground">
-                    Repaid on: {formatDate(loan.data.repaidTs.value)}
+                    Repaid on: {formatDate(repaidTs)}
                   </div>
                 )}
               </CardContent>

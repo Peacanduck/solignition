@@ -22,6 +22,8 @@ export function useSetPausedMutation({ account }: { account: UiWalletAccount }) 
 
       const instruction = getSetPausedInstruction({
         admin: signer,
+        program: SOLIGNITION_PROGRAM_ADDRESS,
+        eventAuthority: signer.address, //placeholder
         protocolConfig,
         isPaused,
       })

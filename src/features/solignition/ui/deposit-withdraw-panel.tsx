@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { UiWalletAccount } from '@wallet-ui/react'
+//import { PublicKey } from "@solana/web3.js";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -7,14 +8,15 @@ import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { TrendingUp, Wallet, Info, DollarSign, Coins, Percent } from 'lucide-react'
-
+import { Wallet, Info, Coins, Percent } from 'lucide-react'
 import { useDepositorRecord } from '../data-access/use-depositor-record'
 import { useDepositMutation } from '../data-access/use-deposit-mutation'
 import { useWithdrawMutation } from '../data-access/use-withdraw-mutation'
 //import { useClaimYieldMutation } from '../data-access/use-claim-yield-mutation'
 import { useProtocolConfig } from '../data-access/use-protocol-config'
 import { useVaultBalance } from '../data-access/use-vault-balance'
+import { address } from '@solana/kit';
+
 
 // Updated to send SHARES to backend instead of SOL amounts
 // - Deposit: converts SOL input → shares → sends shares to backend
@@ -31,15 +33,15 @@ function formatSOL(lamports: bigint, precision = 6) {
   const decimals = scaled.toString().padStart(precision, '0')
   return `${sign}${whole.toString()}.${decimals}`
 }
-
+/* 
 function safeDiv(n: bigint, d: bigint) {
   if (d === 0n) return 0n
   return n / d
-}
+}*/
 
 export function DepositWithdrawPanel({ account }: { account: UiWalletAccount }) {
   // data hooks
-  const depositorQuery = useDepositorRecord(account.address)
+  const depositorQuery = useDepositorRecord(address(account.address))
   const configQuery = useProtocolConfig()
   const vaultBalanceQuery = useVaultBalance()
 
@@ -77,9 +79,9 @@ export function DepositWithdrawPanel({ account }: { account: UiWalletAccount }) 
 
   // derived data
   const shareAmount = depositorQuery.data?.data.shareAmount ?? 0n
-  const depositedAmount = amountForShares(shareAmount) ?? 0n
+ // const depositedAmount = amountForShares(shareAmount) ?? 0n
  // const totalDeposits = configQuery.data?.data.totalDeposits ?? 0n
-  const totalYieldDistributed = configQuery.data?.data.totalYieldDistributed ?? 0n
+  //const totalYieldDistributed = configQuery.data?.data.totalYieldDistributed ?? 0n
   const totalLoansOutstanding = configQuery.data?.data.totalLoansOutstanding ?? 0n
   
   const currentValue = useMemo(() => {
@@ -88,14 +90,14 @@ export function DepositWithdrawPanel({ account }: { account: UiWalletAccount }) 
     return (shareAmount * price) / SHARE_DECIMALS
   }, [shareAmount, totalShares, calculateSharePrice])
 
-  const earnedInterest = currentValue > depositedAmount ? currentValue - depositedAmount : 0n
+  //const earnedInterest = currentValue > depositedAmount ? currentValue - depositedAmount : 0n
   const availableLiquidity = vaultBalance 
 
-  // Calculate shares needed to withdraw earned interest only
+  /* Calculate shares needed to withdraw earned interest only
   const sharesForInterest = useMemo(() => {
     if (earnedInterest <= 0n) return 0n
     return sharesForAmount(earnedInterest)
-  }, [earnedInterest, calculateSharePrice])
+  }, [earnedInterest, calculateSharePrice])*/
 
   // Validation: check if withdrawal amount is possible
   const canWithdrawAmount = (amountLamports: bigint) => {
@@ -118,13 +120,13 @@ export function DepositWithdrawPanel({ account }: { account: UiWalletAccount }) 
     setDepositAmount('')
   }
 
-  // CLAIM YIELD: Calculate shares representing only the interest earned
+  /* CLAIM YIELD: Calculate shares representing only the interest earned
   const handleClaimYield = async () => {
     if (earnedInterest <= 0n) return
     
     // Backend expects shares to burn
    // await claimYieldMutation.mutateAsync()
-  }
+  }*/
 
   // WITHDRAW CUSTOM: User enters SOL > convert to shares > send shares to backend
   const handleWithdrawCustom = async () => {
@@ -153,13 +155,13 @@ export function DepositWithdrawPanel({ account }: { account: UiWalletAccount }) 
     await withdrawMutation.mutateAsync(sharesToBurn)
   }
 
-  // WITHDRAW ALL: Send all user's shares
+  /* WITHDRAW ALL: Send all user's shares
   const handleWithdrawAll = async () => {
     if (!canWithdrawAmount(currentValue)) return
     
     // Backend expects shares - send all of them
     await withdrawMutation.mutateAsync(shareAmount)
-  }
+  }*/
 
   if (loading) return <div className="p-6">Loading...</div>
 

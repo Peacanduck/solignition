@@ -151,7 +151,7 @@ export function AdminProtocolControls({ account }: { account: UiWalletAccount })
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               Protocol Status
-              {configQuery.data.data.isPaused ? (
+              {configQuery.data?.data.isPaused ? (
                 <Badge variant="destructive">Paused</Badge>
               ) : (
                 <Badge className="bg-green-500">Active</Badge>
@@ -162,26 +162,26 @@ export function AdminProtocolControls({ account }: { account: UiWalletAccount })
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                The protocol is currently {configQuery.data.data.isPaused ? 'paused' : 'active'}. Users{' '}
-                {configQuery.data.data.isPaused ? 'cannot' : 'can'} interact with the protocol.
+                The protocol is currently {configQuery.data?.data.isPaused ? 'paused' : 'active'}. Users{' '}
+                {configQuery.data?.data.isPaused ? 'cannot' : 'can'} interact with the protocol.
               </p>
             </div>
 
             <Button
               onClick={handleTogglePause}
               disabled={setPausedMutation.isPending}
-              variant={configQuery.data.data.isPaused ? 'default' : 'destructive'}
+              variant={configQuery.data?.data.isPaused ? 'default' : 'destructive'}
               className="w-full"
             >
               {setPausedMutation.isPending
                 ? 'Processing...'
-                : configQuery.data.data.isPaused
+                : configQuery.data?.data.isPaused
                   ? 'Unpause Protocol'
                   : 'Pause Protocol'}
             </Button>
 
             <p className="text-xs text-muted-foreground">
-              {configQuery.data.data.isPaused
+              {configQuery.data?.data.isPaused
                 ? 'Unpausing will allow users to deposit, withdraw, and request loans.'
                 : 'Pausing will prevent new deposits and loan requests. Existing loans can still be repaid.'}
             </p>

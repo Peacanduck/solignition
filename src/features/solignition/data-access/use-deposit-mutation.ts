@@ -21,6 +21,7 @@ export function useDepositMutation({ account }: { account: UiWalletAccount }) {
       })
 
       const instruction = await getDepositInstructionAsync({
+        program: SOLIGNITION_PROGRAM_ADDRESS,
         depositor: signer,
         protocolConfig,
         amount,

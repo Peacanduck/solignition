@@ -7,13 +7,13 @@ import { RequestLoanPanel } from './ui/request-loan-panel'
 import { LoansDisplay } from './ui/loans-display'
 import { ProtocolStats } from './ui/protocol-stats'
 //import { AdminPanel } from './ui/admin-panal'
-import { useProtocolConfig } from './data-access/use-protocol-config'
+//import { useProtocolConfig } from './data-access/use-protocol-config'
 
 export default function SolignitionFeature() {
   const { account } = useSolana();
-  const configQuery = useProtocolConfig();
+  //const configQuery = useProtocolConfig();
   
-  const isAdmin = true;//account && configQuery.data?.data.admin === account.address
+  //const isAdmin = true;//account && configQuery.data?.data.admin === account.address
 
   return (
     <div className="space-y-8">

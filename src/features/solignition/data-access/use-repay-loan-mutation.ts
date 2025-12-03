@@ -2,13 +2,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { UiWalletAccount, useWalletUiSigner } from '@wallet-ui/react'
 import { useWalletUiSignAndSend } from '@wallet-ui/react-gill'
 import { getRepayLoanInstructionAsync, SOLIGNITION_PROGRAM_ADDRESS } from '@project/anchor'
-import { address, getProgramDerivedAddress } from '@solana/kit'
+import {  getProgramDerivedAddress } from '@solana/kit'
 import { toastTx } from '@/components/toast-tx'
 import { useSolana } from '@/components/solana/use-solana'
 import type { Address } from '@solana/kit'
 import { toast } from 'sonner'
-import { Connection, PublicKey } from '@solana/web3.js'
-import { useProtocolConfig } from './use-protocol-config'
+//import {  PublicKey } from '@solana/web3.js'
+//import { useProtocolConfig } from './use-protocol-config'
 const DEPLOYER_API_URL = import.meta.env.VITE_DEPLOYER_API_URL || 'http://localhost:3000'
 
 interface NotifyRepaidResponse {
@@ -26,11 +26,12 @@ export function useRepayLoanMutation({ account }: { account: UiWalletAccount }) 
   const queryClient = useQueryClient()
   const signer = useWalletUiSigner({ account })
   const signAndSend = useWalletUiSignAndSend()
-  const protocolConfigQuery = useProtocolConfig()
+ // const protocolConfigQuery = useProtocolConfig()
   
   return useMutation({
     mutationFn: async ({ loanAddress, programData, loanId }: { loanAddress: Address; programData: Address, loanId: BigInt }) => {
-      
+      let loanID = BigInt(loanId.toString());
+      console.log('progData',programData);
       // Derive protocol config PDA
       const [protocolConfig] = await getProgramDerivedAddress({
         programAddress: SOLIGNITION_PROGRAM_ADDRESS,
@@ -41,20 +42,20 @@ export function useRepayLoanMutation({ account }: { account: UiWalletAccount }) 
       programAddress: SOLIGNITION_PROGRAM_ADDRESS,
       seeds: [new TextEncoder().encode('vault')], // Matches VAULT_SEED
       })
-
+       /*
       const [authorityPda] = await getProgramDerivedAddress({
       programAddress: SOLIGNITION_PROGRAM_ADDRESS,
       seeds: [new TextEncoder().encode('authority')], // Matches AUTHORITY_SEED
       })
 
-        // Convert your addresses to PublicKey objects for the v1 Connection API
+         // Convert your addresses to PublicKey objects for the v1 Connection API
 const protocolConfigPubkey = new PublicKey(protocolConfig) 
 const vaultPubkey = new PublicKey(vault)
 const authorityPdaPubkey = new PublicKey(authorityPda)
 const loanAddressPubkey = new PublicKey(loanAddress)
 const programDataPubkey = new PublicKey(programData)
 
-     /* const connection = new Connection(cluster.rpcUrl, 'confirmed'); 
+     const connection = new Connection(cluster.rpcUrl, 'confirmed'); 
 
 // 1. Check if all accounts exist
 const [protocolConfigInfo, vaultInfo, authorityInfo, loanInfo, programDataInfo] = await Promise.all([
@@ -92,7 +93,7 @@ if (protocolConfigInfo) {
        // programData,
         vault,
        // deployer: protocolConfigQuery.data?.data.deployer,
-        loanId 
+        loanId: loanID,
         })
       
         signature = await signAndSend(instruction, signer);
@@ -128,12 +129,14 @@ if (protocolConfigInfo) {
               if (!notifyResponse.ok) {
                 const errorData = await notifyResponse.json()
                // toast.error('Failed to notify deployer', { errorData })
+               console.log('Deployer notification failed', { errorData });
                 toast.warning('Loan repaid but auth transfer failed', {
                   description: 'Please contact support if you dont have ownership of your program',
                 })
               } else {
                 const notifyData: NotifyRepaidResponse = await notifyResponse.json()
                 //logger.info('Deployer notified successfully', { notifyData })
+                console.log('Deployer notified successfully', { notifyData });
                 toast.warning('Loan repaid but auth transfer failed', {
                   description: 'Please contact support if you dont have ownership of your program',
                 })

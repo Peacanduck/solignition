@@ -1,6 +1,6 @@
-import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingUp, Coins, DollarSign, Percent } from 'lucide-react';
+//import React from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { TrendingUp, Coins, Percent } from 'lucide-react';
 
 interface DepositorStatsProps {
   depositedAmount: bigint;

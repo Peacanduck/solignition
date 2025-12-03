@@ -28,6 +28,8 @@ export function useRecoverLoanMutation({ account }: { account: UiWalletAccount }
       })
 
       const instruction = await getRecoverLoanInstructionAsync({
+        deployer: signer, //placehokder
+        program: SOLIGNITION_PROGRAM_ADDRESS,
         admin: signer,
         protocolConfig,
         loan: loanAddress,

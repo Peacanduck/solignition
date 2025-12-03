@@ -30,7 +30,10 @@ export function useUpdateConfigMutation({ account }: { account: UiWalletAccount 
       })
 
       const instruction = getUpdateConfigInstruction({
+        eventAuthority: signer.address, //placeholder
+        program: SOLIGNITION_PROGRAM_ADDRESS,
         admin: signer,
+        adminArg: signer.address, //placeholder
         protocolConfig,
         adminFeeSplitBps: params.adminFeeSplitBps ?? null,
         defaultInterestRateBps: params.defaultInterestRateBps ?? null,

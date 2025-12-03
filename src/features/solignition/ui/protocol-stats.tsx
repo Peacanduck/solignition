@@ -6,6 +6,7 @@ export function ProtocolStats({ address }: { address?: string }) {
   const configQuery = useProtocolConfig()
   const loansQuery = useLoans()
   const activeQuery = useActiveLoans();
+  console.log(address);
 
   console.log('ProtocolStats - loans query:', {
     isLoading: loansQuery.isLoading,

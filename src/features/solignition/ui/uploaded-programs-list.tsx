@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+//import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { FileCode, Calendar, HardDrive, Hash, Clock, CheckCircle, Trash2, AlertCircle } from 'lucide-react'
@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { toast } from 'sonner'
+//import { toast } from 'sonner'
 
 interface UploadedProgramsListProps {
   onSelectProgram: (program: UploadedProgram) => void
@@ -101,7 +101,7 @@ export function UploadedProgramsList({
   }
 
   // Filter to show only programs that can be used (not deployed)
-  const availablePrograms = programs.filter(p => p.status !== '')
+  const availablePrograms = programs;//.filter(p => p.status !== '')
 
   if (availablePrograms.length === 0) {
     return (

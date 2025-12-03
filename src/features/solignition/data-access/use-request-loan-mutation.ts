@@ -20,14 +20,14 @@ type RequestLoanParams = {
   fileId: string
   useExisting: boolean
 }
-
+/* 
 interface UploadResponse {
   success: boolean
   fileId: string
   estimatedCost: number
   binaryHash: string
   message: string
-}
+}*/
 
 interface NotifyLoanResponse {
   success: boolean
@@ -66,11 +66,11 @@ export function useRequestLoanMutation({ account }: { account: UiWalletAccount }
         seeds: [new TextEncoder().encode('config')],
       })
 
-      // Derive deployer PDA
+      /*Derive deployer PDA
       const [deployerPda] = await getProgramDerivedAddress({
         programAddress: SOLIGNITION_PROGRAM_ADDRESS,
         seeds: [new TextEncoder().encode('deployer')],
-      });
+      });*/ 
 
       const [loanPda] = await getProgramDerivedAddress({
         programAddress: SOLIGNITION_PROGRAM_ADDRESS,
@@ -116,6 +116,7 @@ export function useRequestLoanMutation({ account }: { account: UiWalletAccount }
 
         if (!notifyResponse.ok) {
           const errorData = await notifyResponse.json()
+          console.log('Loan created but deployment notification failed', { errorData });
           toast.warning('Loan created but deployment notification failed', {
             description: 'Please contact support if your program is not deployed',
           })

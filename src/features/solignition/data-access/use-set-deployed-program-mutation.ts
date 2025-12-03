@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { UiWalletAccount, useWalletUiSigner } from '@wallet-ui/react'
 import { useWalletUiSignAndSend } from '@wallet-ui/react-gill'
 import { getSetDeployedProgramInstruction, SOLIGNITION_PROGRAM_ADDRESS } from '@project/anchor'
-import { getProgramDerivedAddress } from '@solana/kit'
+import {  getProgramDerivedAddress } from '@solana/kit'
 import { toastTx } from '@/components/toast-tx'
 import { useSolana } from '@/components/solana/use-solana'
 import type { Address } from '@solana/kit'
@@ -34,6 +34,8 @@ export function useSetDeployedProgramMutation({ account }: { account: UiWalletAc
         loan: loanAddress,
         loanId,
         programPubkey,
+        eventAuthority: signer.address, //placeholder
+        program: SOLIGNITION_PROGRAM_ADDRESS,
       })
 
       return await signAndSend(instruction, signer)

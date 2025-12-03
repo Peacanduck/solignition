@@ -165,6 +165,7 @@ export function useUploadProgramFile() {
     },
     onSuccess: (data) => {
       // Invalidate uploads list to include the new upload
+      console.log('Upload successful', data);
       queryClient.invalidateQueries({ queryKey: ['uploaded-programs'] })
       queryClient.invalidateQueries({ queryKey: ['uploaded-programs-paginated'] })
     },

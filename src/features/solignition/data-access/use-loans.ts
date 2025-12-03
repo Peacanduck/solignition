@@ -244,7 +244,7 @@ function normalizeLoanData(rawData: any): Loan {
  * @param borrower - Optional borrower address to filter loans. Pass as string.
  */
 export function useLoans(borrower?: string) {
-  const { client, cluster } = useSolana()
+  const { cluster } = useSolana()
   const configQuery = useProtocolConfig()
   
   return useQuery({

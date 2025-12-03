@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { UiWalletAccount, useWalletUiSigner } from '@wallet-ui/react'
 import { useWalletUiSignAndSend } from '@wallet-ui/react-gill'
-import { getInitializeInstructionAsync } from '@project/anchor'
+import { getInitializeInstructionAsync, SOLIGNITION_PROGRAM_ADDRESS } from '@project/anchor'
 import { toastTx } from '@/components/toast-tx'
 import { useSolana } from '@/components/solana/use-solana'
 import type { Address } from '@solana/kit'
@@ -22,6 +22,7 @@ export function useInitializeProtocolMutation({ account }: { account: UiWalletAc
   return useMutation({
     mutationFn: async (params: InitializeParams) => {
       const instruction = await getInitializeInstructionAsync({
+        program: SOLIGNITION_PROGRAM_ADDRESS,
         admin: signer,
         deployer: params.deployer,
         adminFeeSplitBps: params.adminFeeSplitBps,

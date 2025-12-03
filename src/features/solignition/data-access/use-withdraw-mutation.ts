@@ -21,6 +21,7 @@ export function useWithdrawMutation({ account }: { account: UiWalletAccount }) {
       })
 
       const instruction = await getWithdrawInstructionAsync({
+        program: SOLIGNITION_PROGRAM_ADDRESS,
         depositor: signer,
         protocolConfig,
         shares: amount,

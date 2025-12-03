@@ -24,12 +24,11 @@ export type DepositorRecordAccount = {
 }
 
 // Re-export commonly used items for convenience
-export { SOLIGNITION_PROGRAM_ADDRESS } from './generated'
+export { SOLIGNITION_PROGRAM_ADDRESS, LoanState } from './generated'
 export type { 
   Loan, 
   ProtocolConfig, 
-  DepositorRecord,
-  LoanState 
+  DepositorRecord, 
 } from './generated'
 
 // Helper function to check loan state
