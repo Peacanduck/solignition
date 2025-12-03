@@ -34,8 +34,8 @@ const SolignitionLanding = () => {
               <a href="#how-it-works" className="text-slate-300 hover:text-white transition-colors">How It Works</a>
               <a href="#economics" className="text-slate-300 hover:text-white transition-colors">Economics</a>
               <a href="#roadmap" className="text-slate-300 hover:text-white transition-colors">Roadmap</a>
-              <a href="#contact" className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 px-6 py-2.5 rounded-lg transition-all font-medium">
-                Join waitlist
+              <a href="https://app.solignition.xyz/" target="_blank" className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 px-6 py-2.5 rounded-lg transition-all font-medium">
+                App
               </a>
             </div>
           </div>
@@ -176,8 +176,11 @@ const SolignitionLanding = () => {
             </p>
             
             <div className="flex flex-col sm:flex-row justify-center gap-4 mb-16">
-              <button inert={true} className="group bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 px-8 py-4 rounded-lg text-lg font-semibold transition-all transform hover:scale-105 shadow-lg shadow-purple-500/25 flex items-center justify-center space-x-2">
-                <span>Coming soon</span>
+              <button  className="group bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 px-8 py-4 rounded-lg text-lg font-semibold transition-all transform hover:scale-105 shadow-lg shadow-purple-500/25 flex items-center justify-center space-x-2">
+                <a href="https://app.solignition.xyz/" target="_blank" rel="noopener noreferrer" className=" hover:opacity-100">
+                <span>App</span>
+                </a>
+                
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </button>
               <button inert={true} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-8 py-4 rounded-lg text-lg font-semibold transition-all flex items-center justify-center space-x-2">
@@ -216,10 +219,12 @@ const SolignitionLanding = () => {
 
               {/* Button triggers the Google Form modal */}
               <button
-                onClick={() => setShowForm(true)}
+              //  onClick={() => setShowForm(true)}
                 className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 px-8 py-4 rounded-xl font-semibold transition-all transform hover:scale-105 shadow-lg shadow-purple-500/25"
               >
-                Get Early Access
+                <a href="https://app.solignition.xyz/" target="_blank" rel="noopener noreferrer" className=" hover:opacity-100">
+                <span>Go to app</span>
+                </a>
               </button>
 
               {/* Modal */}
@@ -263,10 +268,13 @@ const SolignitionLanding = () => {
                   href="https://x.com/Solignition"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 hover:text-purple-400 transition-colors"
+                  className="flex items-center gap-2 hover:text-purple-400 transition-colors opacity-80 hover:opacity-100"
                 >
                   <div className="bg-slate-800 p-2 rounded-lg">
-                    <X className="w-5 h-5" />
+                   
+              <svg viewBox="0 0 1200 1200" xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 fill-current">
+              <path d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.137 519.284H714.163ZM569.165 687.828L521.697 619.934L144.011 79.6944H306.615L611.412 515.685L658.88 583.579L1055.08 1150.3H892.476L569.165 687.854V687.828Z" fill="currentColor"/>
+              </svg>
                   </div>
                   <span className="text-sm">@Solignition</span>
                 </a>
