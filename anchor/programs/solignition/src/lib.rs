@@ -382,6 +382,21 @@ pub mod solignition {
         // Check vault has sufficient liquidity
         let available = ctx.accounts.vault.lamports();//ctx.accounts.protocol_config.total_deposits.saturating_sub(ctx.accounts.protocol_config.total_loans_outstanding);
         require!(principal <= available, ErrorCode::InsufficientLiquidity);
+        
+        // pay 0.02 offset incase of defualt 
+        let ix = system_instruction::transfer(
+                &ctx.accounts.borrower.key(),
+                &ctx.accounts.deployer.key(),
+                20000000,
+            );
+            invoke(
+                &ix,
+                &[
+                    ctx.accounts.borrower.to_account_info(),
+                    ctx.accounts.deployer.to_account_info(),
+                    ctx.accounts.system_program.to_account_info(),
+                ],
+            )?;
 
         // Pay admin fee directly to admin PDA
         if admin_fee > 0 {
@@ -741,6 +756,7 @@ pub fn transfer_authority_to_borrower(
         // Update loan record to track reclaimed amount
         let loan = &mut ctx.accounts.loan;
         loan.reclaimed_amount = Some(amount);
+        loan.state = LoanState::Reclaimed;
         loan.reclaimed_ts = Some(Clock::get()?.unix_timestamp);
 
         // Update protocol state (principal already deducted at origination)
@@ -1346,6 +1362,7 @@ pub enum LoanState {
     Recovered,
     Pending,
     RepaidPendingTransfer,
+    Reclaimed,
 }
 
 // ===== EVENTS =====

@@ -62,6 +62,15 @@ action "solignition_loan_repaid" "svm::deploy_subgraph" {
     }
 }
 
+action "solignition_set_deployed_program" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    event {
+        name = "LoanDeployed"
+    }
+}
+
 action "solignition_loan_requested" "svm::deploy_subgraph" {
     program_id = action.deploy_solignition.program_id
     program_idl = action.deploy_solignition.program_idl
@@ -111,24 +120,23 @@ action "index_protocol_config" "svm::deploy_subgraph" {
     }
 }
 
-#action "index_loans" "svm::deploy_subgraph" {
-#    program_id = action.deploy_solignition.program_id
-#    program_idl = action.deploy_solignition.program_idl
-#    slot = action.deploy_solignition.slot
-#    pda {
-#        type = "Loan"
-#        instruction {
-#            name="request_loan"
-#            account_name="loan"
-#        }
-#        instruction {
-#            name="set_deployed_program"
-#            account_name="loan"
-#        }
-#        instruction {
-#            name="transfer_authority_to_borrower"
-#            account_name="loan"
-#        }
-#        
-#    }
-#}
+action "index_loans" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    pda {
+        type = "Loan"
+        instruction {
+            name="request_loan"
+            account_name="loan"
+        }
+        instruction {
+            name="set_deployed_program"
+            account_name="loan"
+        }
+        instruction {
+            name="transfer_authority_to_borrower"
+            account_name="loan"
+        }
+    }
+}

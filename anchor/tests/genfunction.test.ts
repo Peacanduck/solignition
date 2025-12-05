@@ -74,17 +74,17 @@ describe("solignition", () => {
 
 
     // Generate keypairs
-    admin = adminKeypair;
+    admin = deployerKeypair//adminKeypair;
     depositor1 = Keypair.generate();
     depositor2 = Keypair.generate();
     depositor3 = Keypair.generate();
     borrower = Keypair.generate();
     deployer = deployerKeypair;
 
-    /* Airdrop SOL to test accounts
+    /* Airdrop SOL to test accounts*/
     const airdropAmount = 100 * LAMPORTS_PER_SOL;
     await connection.confirmTransaction(
-      await connection.requestAirdrop(admin.publicKey, airdropAmount)
+      await connection.requestAirdrop(deployer.publicKey, airdropAmount)
     );
     await connection.confirmTransaction(
       await connection.requestAirdrop(depositor1.publicKey, airdropAmount)
@@ -94,7 +94,7 @@ describe("solignition", () => {
     );
     await connection.confirmTransaction(
       await connection.requestAirdrop(borrower.publicKey, airdropAmount)
-    );*/
+    );
     
 
     // Derive PDAs
