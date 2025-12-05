@@ -111,7 +111,8 @@ export function LoansDisplay({ account }: { account: UiWalletAccount }) {
           const NowTimestampSeconds = BigInt(Math.floor(Date.now() / 1000))
           const totalOwed = calculateTotalOwed(loan.data.principal, BigInt(loan.data.interestRateBps), BigInt(NowTimestampSeconds - loan.data.startTs), loan.data.duration);
           const isActive = loan.data.state === LoanState.Active
-          const repaidTs = loan.data.repaidTs.__option === "Some" ? loan.data.repaidTs.value : 0n;
+          const repaidTs = loan.data.repaidTs?.__option === "Some" ? loan.data.repaidTs.value : 0n;
+          console.log('programId', loan.data.programPubkey);
 
           return (
             <Card key={loan.address}>

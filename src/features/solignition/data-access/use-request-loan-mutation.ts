@@ -88,7 +88,7 @@ export function useRequestLoanMutation({ account }: { account: UiWalletAccount }
         deployer: protocolConfigQuery.data.data.deployer,
         loan: loanPda,
         principal: params.principal,
-        duration: params.duration,
+        duration: params.duration, //2400n ~40min value for testing
         interestRateBps: params.interestRateBps,
         adminFeeBps: params.adminFeeBps,
       })
