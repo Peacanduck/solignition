@@ -94,6 +94,7 @@ interface DeploymentRecord {
   binaryHash?: string;
   binaryPath?: string;
   principal: string;
+  programAccountOpen: boolean;
 }
 
 interface FileUploadRecord {
@@ -113,7 +114,7 @@ interface LoanAccount {
   borrower: PublicKey;
   principal: anchor.BN;
   deployedProgram: PublicKey | null;
-  state: number; // 0: Active, 1: Repaid, 2: Recovered, 4:pending 5:RepaidPendingTransfer
+  state: number; // 0: Active, 1: Repaid, 2: Recovered, 4:pending 5:RepaidPendingTransfer 6:Reclaimed
   startTs: anchor.BN;
   duration: anchor.BN;
   interestRateBps: number;
@@ -499,6 +500,9 @@ class SolanaCliDeployer {
 
       // Execute the deployment
       const { stdout, stderr } = await execAsync(deployCommand);
+
+      console.log('deploy command output:', stdout);
+      console.log('deploy command error output:', stderr);
       
       if (stderr && !stderr.includes('Program Id:')) {
         throw new Error(`Deployment error: ${stderr}`);
@@ -547,7 +551,8 @@ class SolanaCliDeployer {
         --commitment confirmed`;
 
       const { stdout, stderr } = await execAsync(closeCommand);
-      
+      console.log('close command output:', stdout);
+      console.log('close command error output:', stderr);
       if (stderr && !stderr.includes('closed')) {
         throw new Error(`Close error: ${stderr}`);
       }
@@ -1086,14 +1091,14 @@ public async checkPendingLoansForDeployment(): Promise<void> {
         const loanId = loan.loanId.toString();
         const stateKey = Object.keys(loan.state ?? {})[0] ?? 'unknown';
         const isPending = stateKey === 'pending';
-        
+        // Check if we have a deployment record with a program ID
+        const deployment = await this.stateManager.getDeployment(loanId);
+
         if (isPending) {
           pendingCount++;
           
           // Check if loan already has a deployed program set
           const hasDeployedProgram = loan.deployedProgram && !loan.deployedProgram.equals(PublicKey.default);
-          
-          
           
           if (hasDeployedProgram) {
             logger.debug('Loan already has deployed program set', {
@@ -1108,20 +1113,32 @@ public async checkPendingLoansForDeployment(): Promise<void> {
             borrower: loan.borrower.toString(),
           });
           
-          // Check if we have a deployment record with a program ID
-          const deployment = await this.stateManager.getDeployment(loanId);
+          
           
           if (!deployment) {
             logger.debug('No deployment record found for pending loan', { loanId });
             continue;
           }
+          logger.info('program account open', deployment.programAccountOpen);
+          console.log('program account open', deployment.programAccountOpen);
+          console.log('program ', deployment.programId);
           
-          if (!deployment.programId) {
+          //check if loan is expired 
+          let isExpired = Date.now() > (loan.startTs + loan.duration);
+          if (!deployment.programAccountOpen && !isExpired) {
             logger.debug('Deployment record exists but no programId', {
               loanId,
               deploymentStatus: deployment.status,
             });
-            
+            // TODO try to deploy program 
+            logger.info('attempting to deploy', deployment.loanId);
+            //check if loan expired 
+            await this.processDeployment(deployment);
+
+            deployment.status = 'deployed';
+            deployment.updatedAt = Date.now();
+            await this.stateManager.saveDeployment(deployment);
+
             continue;
           }
           
@@ -1386,16 +1403,20 @@ public async checkPendingAuthTransfers(): Promise<void> {
         
 
         const stateKey = Object.keys(loan.state ?? {})[0] ?? 'unknown';
-        const isActiveOrPending = ['active', 'pending'].includes(stateKey);
+        const isActiveOrPending = ['active', 'pending','recovered'].includes(stateKey);
         const isRecovered = ['recovered'].includes(stateKey);
         logger.info(`loan is ${stateKey}`);
         logger.info(`reclaim is ${reclaimed}`);
         logger.info(`loan start: ${startTime} loan duration: ${duration} expirationTime: ${expirationTime} currentTime: ${currentTimestamp}`);
-
-
+        
+        const deployment = await this.stateManager.getDeployment(loanId);
+         
+          if(isRecovered && reclaimed == 0 && deployment.programAccountOpen){
+            // close account and send sol 
+          }
         
          //logger.info('loan object ', loan);
-      if(reclaimed == 0 || !isRecovered){ //when 0 returnSol has not been called yet
+      if(reclaimed == 0 ){ //when 0 returnSol has not been called yet
         if (isActiveOrPending && currentTimestamp > expirationTime) { // 
           
           logger.info('Found expired loan', {
@@ -1406,28 +1427,32 @@ public async checkPendingAuthTransfers(): Promise<void> {
             currentTime: new Date(currentTimestamp * 1000).toISOString(),
             hoursOverdue: ((currentTimestamp - expirationTime) / 3600).toFixed(2),
           });
-          
-          const deployment = await this.stateManager.getDeployment(loanId);
-          
-          if (deployment && deployment.status === 'deployed') {
            
+          console.log('deployment ', deployment);
+         /*  if(deployment.status === 'failed' && deployment.programAccountOpen){
+            deployment.status = 'deployed';
+            await this.stateManager.saveDeployment(deployment); 
+          }*/
+        //  if (true) {//deployment && deployment.status === 'deployed'
+           // Execute the complete recovery flow
             logger.info('Processing full recovery for expired loan', { loanId });
             try {
+
               await this.executeCompleteRecovery(loanId, loan, loanAccountInfo.publicKey);
+              await new Promise(resolve => setTimeout(resolve, 1000));
                expiredCount++;
                processedCount++;
             } catch (error) {
               logger.error('Error during complete recovery for expired loan ', error);
             }
-            // Execute the complete recovery flow
             
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          } else  {
+          /* }  else  {
             logger.warn('No deployed program found for expired loan', {
               loanId,
               deploymentStatus: deployment?.status || 'not found',
             });
-          }
+           //no deployed program so 
+          }*/
           
         }
       }
@@ -1466,16 +1491,29 @@ private async executeCompleteRecovery(
     const stateKey = Object.keys(loan.state ?? {})[0] ?? 'unknown';
     const isActiveOrPending = ['active', 'pending'].includes(stateKey);
     const isActive =  ['active'].includes(stateKey);
+    let isRecovered = false;
 
     // Step 1: Call recoverLoan to mark the loan as recovered
-    if(isActiveOrPending){
-    await this.callRecoverLoan(loanId, loan, loanPubkey);
+    try {
+     if(isActiveOrPending){
+       logger.info('marking loan for recovery', { loanId });
+       let txRecoverSig = await this.callRecoverLoan(loanId, loan, loanPubkey);
+       isRecovered = true;
+      } 
+    } catch (error) {
+      logger.error('Error calling recoverLoan for loan: ', loanId)
+      throw error;
     }
     
     // Step 2: Close the deployed program
-    const deployment = await this.stateManager.getDeployment(loanId);
-    if (deployment && deployment.programId && loan.deployedProgram) {
-      if(isActive && deployment.status != 'recovered'){//only close active loans that have expired
+    let deployment;
+    try {
+      logger.info('getting deployment: ', loanId );
+       deployment = await this.stateManager.getDeployment(loanId);
+       logger.info('got deployment: ', deployment );
+    if (deployment && deployment.programId && deployment.programAccountOpen) {
+      logger.info('trying to close deployed program: ', deployment.programId );
+      if(isRecovered){   //only close active loans that have expired and marked recovered
       await this.closeDeployedProgram(loanId, new PublicKey(deployment.programId));
       }
       // Step 3: Return reclaimed SOL to vault
@@ -1483,6 +1521,10 @@ private async executeCompleteRecovery(
       //const reclaimedAmount = await this.getReclaimedAmount(deployment.programId);
       //const returnSig = await this.callReturnReclaimedSol(loanId, loan, loanPubkey, loan.principal);
     }
+    } catch (error) {
+      logger.error('Error closing program for loan: ', loanId)
+    }
+   
 
     // just return sol if there is no deployed program
     if(loan.reclaimedAmount.toNumber() == 0 ){
@@ -1727,6 +1769,7 @@ private async callReturnReclaimedSol(
       status: 'pending',
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      programAccountOpen: false,
     };
     await this.stateManager.saveDeployment(deployment);
 
@@ -1794,6 +1837,7 @@ private async callReturnReclaimedSol(
       status: 'pending',
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      programAccountOpen: false,
     };
     
     await this.stateManager.saveDeployment(deployment);
@@ -1812,6 +1856,7 @@ private async callReturnReclaimedSol(
       throw new Error('No binary path specified for deployment');
     }
 
+    try {
     deployment.status = 'deploying';
     deployment.updatedAt = Date.now();
     await this.stateManager.saveDeployment(deployment);
@@ -1824,27 +1869,38 @@ private async callReturnReclaimedSol(
     
     deployment.status = 'deployed';
     deployment.updatedAt = Date.now();
+    deployment.programAccountOpen = true;
     await this.stateManager.saveDeployment(deployment);
 
     logger.info('Deployment completed successfully', {
       loanId,
       programId,
     });
-// Update the on-chain loan with deployed program
-    logger.info('trying to set deployed program in contract', {loanId, programId, borrower });
+
+    } catch (error) {
+      logger.error('Deployment failed', { loanId, error });
+      deployment.status = 'failed';
+      deployment.updatedAt = Date.now();
+      deployment.programAccountOpen = false;
+      await this.stateManager.saveDeployment(deployment);
+    }
+
+     // Update the on-chain loan with deployed program
+    logger.info('trying to set deployed program in contract', {loanId, borrower }, deployment.programId);
 
     let setTx = null;
     try {
-      setTx = await this.setDeployedProgram(loanId, new PublicKey(programId), new PublicKey(borrower));
+      setTx = await this.setDeployedProgram(loanId, new PublicKey(deployment.programId), new PublicKey(borrower));
 
       deployment.setDeployedTxSignature = setTx;
       deployment.updatedAt = Date.now();
       await this.stateManager.saveDeployment(deployment);
       
     } catch (error) {
-      logger.info('failed to set deployed program in contract', {loanId, programId, borrower });
+      logger.info('failed to set deployed program in contract', {loanId, borrower }, deployment.programId);
+      throw error;
     }
-  
+
   }
 
   public async transferDeployedProgramAuth(loanId: string | number, borrower: PublicKey): Promise<string> {
@@ -1993,6 +2049,7 @@ private async callReturnReclaimedSol(
 
         deployment.recoveryTxSignature = signature;
         deployment.status = 'recovered';
+        deployment.programAccountOpen = false;
         deployment.updatedAt = Date.now();
         await this.stateManager.saveDeployment(deployment);
 
@@ -2232,7 +2289,7 @@ class ApiServer {
     // Notify about new loan request - called by frontend after transaction
     this.app.post('/notify-loan', async (req, res) => {
       try {
-        const { signature, borrower, loanId } = req.body;
+        const { signature, borrower, loanId, fileId } = req.body;
         
         if (!signature || !borrower) {
           logger.warn('Notify loan request missing required fields', { signature, borrower });
@@ -2248,7 +2305,7 @@ class ApiServer {
         });
 
         // Check if we have a file upload for this borrower
-        const fileUpload = await this.stateManager.getFileUploadByBorrower(borrower);
+        const fileUpload = await this.stateManager.getFileUpload(fileId)
         if (!fileUpload) {
           logger.error('No file upload found for borrower', { borrower, signature });
           return res.status(404).json({ 
@@ -2631,6 +2688,7 @@ this.app.delete('/uploads/:fileId', async (req, res) => {
         status: 'pending',
         createdAt: Date.now(),
         updatedAt: Date.now(),
+        programAccountOpen: false,
       };
 
       await this.stateManager.saveDeployment(deployment);

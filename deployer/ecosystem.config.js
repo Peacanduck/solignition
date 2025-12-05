@@ -2,6 +2,10 @@ module.exports = {
   apps : [{
     name: "deployer",
     script: "/home/ubuntu/solignition/deployer/dist/deployer/src/index.js",
+    watch: true,
+    output:'./out.log',
+    error:'./error.log',
+    log:'./combined.outerr.log',
     env: {
       NODE_ENV: "development",
     },
