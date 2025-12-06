@@ -590,7 +590,7 @@ pub mod solignition {
     loan.interest_paid = Some(interest);
 
     // Update protocol state
-    ctx.accounts.protocol_config.total_loans_outstanding -= loan.principal;
+    ctx.accounts.protocol_config.total_loans_outstanding -= ctx.accounts.protocol_config.total_loans_outstanding.saturating_sub(loan.principal);
 
     emit_cpi!(LoanRepaid {
         loan_id: loan.loan_id,
@@ -759,8 +759,8 @@ pub fn transfer_authority_to_borrower(
         loan.state = LoanState::Reclaimed;
         loan.reclaimed_ts = Some(Clock::get()?.unix_timestamp);
 
-        // Update protocol state (principal already deducted at origination)
-        ctx.accounts.protocol_config.total_loans_outstanding -= loan.principal;
+        // Update protocol state 
+        ctx.accounts.protocol_config.total_loans_outstanding -= ctx.accounts.protocol_config.total_loans_outstanding.saturating_sub(loan.principal);
         
         emit_cpi!(SolReclaimed {
             loan_id: loan.loan_id,
@@ -818,6 +818,24 @@ pub fn transfer_authority_to_borrower(
         
         Ok(())
     }
+
+    /*fix remove after use
+pub fn fix_loans_outstanding(ctx: Context<FixLoansOutstanding>, correct_amount: u64) -> Result<()> {
+    // Only admin can fix
+    require!(
+        ctx.accounts.caller.key() == ctx.accounts.protocol_config.admin,
+        ErrorCode::Unauthorized
+    );
+    
+    msg!("Fixing total_loans_outstanding from {} to {}", 
+         ctx.accounts.protocol_config.total_loans_outstanding, 
+         correct_amount);
+    
+    ctx.accounts.protocol_config.total_loans_outstanding = correct_amount;
+    
+    Ok(())
+}*/
+
 }
 
 /// Helper function to calculate interest
@@ -891,6 +909,21 @@ fn distribute_yield(config: &mut ProtocolConfig, amount: u64) {
         config.total_yield_distributed += amount;
     }
 }
+
+/* 
+#[event_cpi]
+#[derive(Accounts)]
+pub struct FixLoansOutstanding<'info> {
+    pub caller: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [PROTOCOL_CONFIG_SEED],
+        bump = protocol_config.bump,
+        constraint = caller.key() == protocol_config.admin @ ErrorCode::Unauthorized
+    )]
+    pub protocol_config: Account<'info, ProtocolConfig>,
+} */
 
 // ===== CONTEXTS =====
 #[event_cpi]
@@ -1251,6 +1284,7 @@ pub struct ReturnReclaimedSol<'info> {
     pub caller: Signer<'info>,
     
     #[account(
+        mut,
         seeds = [PROTOCOL_CONFIG_SEED],
         bump = protocol_config.bump,
         constraint = caller.key() == protocol_config.admin || caller.key() == protocol_config.deployer @ ErrorCode::Unauthorized

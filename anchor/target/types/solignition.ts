@@ -890,6 +890,7 @@ export type Solignition = {
         },
         {
           "name": "protocolConfig",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -2130,6 +2131,9 @@ export type Solignition = {
           },
           {
             "name": "repaidPendingTransfer"
+          },
+          {
+            "name": "reclaimed"
           }
         ]
       }

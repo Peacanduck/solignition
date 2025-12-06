@@ -884,6 +884,7 @@
         },
         {
           "name": "protocol_config",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -2124,6 +2125,9 @@
           },
           {
             "name": "RepaidPendingTransfer"
+          },
+          {
+            "name": "Reclaimed"
           }
         ]
       }
