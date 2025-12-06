@@ -590,7 +590,7 @@ pub mod solignition {
     loan.interest_paid = Some(interest);
 
     // Update protocol state
-    ctx.accounts.protocol_config.total_loans_outstanding -= ctx.accounts.protocol_config.total_loans_outstanding.saturating_sub(loan.principal);
+    ctx.accounts.protocol_config.total_loans_outstanding = ctx.accounts.protocol_config.total_loans_outstanding.saturating_sub(loan.principal);
 
     emit_cpi!(LoanRepaid {
         loan_id: loan.loan_id,
@@ -760,7 +760,7 @@ pub fn transfer_authority_to_borrower(
         loan.reclaimed_ts = Some(Clock::get()?.unix_timestamp);
 
         // Update protocol state 
-        ctx.accounts.protocol_config.total_loans_outstanding -= ctx.accounts.protocol_config.total_loans_outstanding.saturating_sub(loan.principal);
+        ctx.accounts.protocol_config.total_loans_outstanding = ctx.accounts.protocol_config.total_loans_outstanding.saturating_sub(amount);
         
         emit_cpi!(SolReclaimed {
             loan_id: loan.loan_id,
@@ -910,7 +910,7 @@ fn distribute_yield(config: &mut ProtocolConfig, amount: u64) {
     }
 }
 
-/* 
+/*
 #[event_cpi]
 #[derive(Accounts)]
 pub struct FixLoansOutstanding<'info> {
@@ -923,7 +923,7 @@ pub struct FixLoansOutstanding<'info> {
         constraint = caller.key() == protocol_config.admin @ ErrorCode::Unauthorized
     )]
     pub protocol_config: Account<'info, ProtocolConfig>,
-} */
+}  */
 
 // ===== CONTEXTS =====
 #[event_cpi]
