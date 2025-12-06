@@ -193,7 +193,8 @@ function parseState(state: any): number {
   if (state.recovered !== undefined) return 2
   if (state.pending !== undefined) return 3
   if (state.repaidPendingTransfer !== undefined) return 4
-  return 0
+  if (state.reclaimed !== undefined) return 5
+  return -1
 }
 
 // Helper to convert BN to bigint

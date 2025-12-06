@@ -1491,7 +1491,7 @@ private async executeCompleteRecovery(
     const stateKey = Object.keys(loan.state ?? {})[0] ?? 'unknown';
     const isActiveOrPending = ['active', 'pending'].includes(stateKey);
     const isActive =  ['active'].includes(stateKey);
-    let isRecovered = false;
+    let isRecovered = ['recovered'].includes(stateKey);
 
     // Step 1: Call recoverLoan to mark the loan as recovered
     try {
@@ -1921,12 +1921,13 @@ private async callReturnReclaimedSol(
         [LOAN_SEED, loanIdBn.toArrayLike(Buffer, 'le', 8), borrower.toBuffer()],
         this.program.programId
       );
-
-      const deployment = await this.stateManager.getDeployment(loanId.toString());
+     
+     /*  const deployment = await this.stateManager.getDeployment(loanId.toString());
+      console.log('deployment ', deployment);
       if (!deployment) {
       logger.info(`Loan ${loanId} not in deployed state`, { status: deployment?.status });
       return;
-      }
+      }*/
 
       // Fetch the loan account to get the deployed program pubkey
       //const loanAccount = await this.connection.getAccountInfo(loanPda, 'confirmed');
@@ -1964,10 +1965,10 @@ private async callReturnReclaimedSol(
         throw new Error(`Loan state: ${loanInfo.state} loan needs to be repaid first`);
       }
       
-      const [programData] = PublicKey.findProgramAddressSync([new PublicKey(deployment.programId).toBuffer()], BPF_UPGRADEABLE_LOADER);
+      const [programData] = PublicKey.findProgramAddressSync([loanInfo.programPubkey.toBuffer()], BPF_UPGRADEABLE_LOADER);
 
        logger.info("\n🔑 Authority Transfer Details:");
-       logger.info("Deployed Program:", deployment.programId.toString());
+       logger.info("Deployed Program:", loanInfo.programPubkey.toString());
        logger.info("Program Data:", programData.toString());
        logger.info("Current Authority (Deployer):", this.deployerWallet.publicKey.toString());
        logger.info("New Authority (Borrower):", borrower.toString());

@@ -69,7 +69,7 @@ export type ReturnReclaimedSolInstruction<
             AccountSignerMeta<TAccountCaller>
         : TAccountCaller,
       TAccountProtocolConfig extends string
-        ? ReadonlyAccount<TAccountProtocolConfig>
+        ? WritableAccount<TAccountProtocolConfig>
         : TAccountProtocolConfig,
       TAccountLoan extends string
         ? WritableAccount<TAccountLoan>
@@ -190,7 +190,7 @@ export async function getReturnReclaimedSolInstructionAsync<
   // Original accounts.
   const originalAccounts = {
     caller: { value: input.caller ?? null, isWritable: false },
-    protocolConfig: { value: input.protocolConfig ?? null, isWritable: false },
+    protocolConfig: { value: input.protocolConfig ?? null, isWritable: true },
     loan: { value: input.loan ?? null, isWritable: true },
     vault: { value: input.vault ?? null, isWritable: true },
     deployer: { value: input.deployer ?? null, isWritable: true },
@@ -330,7 +330,7 @@ export function getReturnReclaimedSolInstruction<
   // Original accounts.
   const originalAccounts = {
     caller: { value: input.caller ?? null, isWritable: false },
-    protocolConfig: { value: input.protocolConfig ?? null, isWritable: false },
+    protocolConfig: { value: input.protocolConfig ?? null, isWritable: true },
     loan: { value: input.loan ?? null, isWritable: true },
     vault: { value: input.vault ?? null, isWritable: true },
     deployer: { value: input.deployer ?? null, isWritable: true },

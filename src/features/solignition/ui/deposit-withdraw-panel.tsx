@@ -59,6 +59,7 @@ export function DepositWithdrawPanel({ account }: { account: UiWalletAccount }) 
   const totalShares = configQuery.data?.data.totalShares ?? 0n
 
   const calculateSharePrice = useMemo(() => {
+    console.log('config:', configQuery.data?.data);
     if (totalShares === 0n) return 1_000_000_000n
     const totalAssets = vaultBalance + (configQuery.data?.data.totalLoansOutstanding ?? 0n)
     return (totalAssets * SHARE_DECIMALS) / totalShares

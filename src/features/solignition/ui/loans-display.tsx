@@ -59,6 +59,8 @@ export function LoansDisplay({ account }: { account: UiWalletAccount }) {
         return <Badge variant="destructive">Pending</Badge>
       case LoanState.RepaidPendingTransfer:
         return <Badge variant="default" className="bg-green-500 text-white">Pending transfer</Badge>
+      case LoanState.Reclaimed:
+        return <Badge variant="secondary">Reclaimed</Badge>
       default:
         return <Badge variant="outline">Unknown</Badge>
     }
@@ -113,6 +115,7 @@ export function LoansDisplay({ account }: { account: UiWalletAccount }) {
           const isActive = loan.data.state === LoanState.Active
           const repaidTs = loan.data.repaidTs?.__option === "Some" ? loan.data.repaidTs.value : 0n;
           console.log('programId', loan.data.programPubkey);
+         // console.log('loan state: ',loan.data.state);
 
           return (
             <Card key={loan.address}>
