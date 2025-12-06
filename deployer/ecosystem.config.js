@@ -28,9 +28,9 @@ module.exports = {
       IDL_PATH:"/home/ubuntu/solignition/anchor/target/idl/solignition.json",
       IDL_PATHTS:"/home/ubuntu/solignition/anchor/target/types/solignition.ts",
       GRAPHQL_ENDPOINT:"http://127.0.0.1:18488/workspace/v1/graphql",
-      FRONTEND_URL:"https://app.solignition.xyz/",
+      FRONTEND_URL:"https://app.solignition.xyz",
       API_KEY_HEADER:"X-API-Key",
-      CORS_ORIGINS:"https://app.solignition.xyz/",
+      CORS_ORIGINS:"https://app.solignition.xyz",
     }
   }]
 }
