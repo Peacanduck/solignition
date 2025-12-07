@@ -384,7 +384,7 @@ class BinaryManager {
   async estimateDeploymentCost(binaryPath: string): Promise<number> {
    try {
      logger.info('Estimating deployment cost for binary', { binaryPath });
-    
+     
      // Get actual rent cost from Solana CLI
      const rentInfo = await this.deployer.estimateRentForFile(binaryPath);
     
@@ -436,8 +436,8 @@ class BinaryManager {
        error, 
        binaryPath 
      });
-    
-     // Fallback to estimated calculation if Solana CLI fails
+      throw error;
+     /* Fallback to estimated calculation if Solana CLI fails
      try {
        const stats = await fs.stat(binaryPath);
        const fileSize = stats.size;
@@ -461,7 +461,7 @@ class BinaryManager {
      } catch (fallbackError) {
        logger.error('Fallback estimation also failed', { fallbackError });
        throw error; // Throw original error
-      }
+      }*/
     }
   }
 }
@@ -2153,10 +2153,10 @@ class ApiServer {
         
         if (allowedOrigins.indexOf(origin) !== -1) {
           callback(null, true);
-        } else {
+        }/**  else {
           logger.warn(`CORS request from unauthorized origin: ${origin}`);
           callback(null, true); // Allow anyway for development
-        }
+        }*/
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD'],

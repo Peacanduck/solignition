@@ -81,7 +81,7 @@ describe("solignition", () => {
     borrower = Keypair.generate();
     deployer = deployerKeypair;
 
-    /* Airdrop SOL to test accounts
+    /* Airdrop SOL to test accounts*/
     const airdropAmount = 100 * LAMPORTS_PER_SOL;
     await connection.confirmTransaction(
       await connection.requestAirdrop(deployer.publicKey, airdropAmount)
@@ -95,7 +95,7 @@ describe("solignition", () => {
     await connection.confirmTransaction(
       await connection.requestAirdrop(borrower.publicKey, airdropAmount)
     );
-    */
+    
 
     // Derive PDAs
     [protocolConfigPda] = PublicKey.findProgramAddressSync(
@@ -133,7 +133,7 @@ describe("solignition", () => {
       program.programId
     );
   });
-
+/** 
   describe("fixLoansOutstanding", () => {
     it("should 0 loansOutstanding ", async () => {
        await program.methods
@@ -144,7 +144,7 @@ describe("solignition", () => {
     }).signers([admin])
     .rpc();
     });
-  });
+  });*/
 
   describe("initialize", () => {
     it("should initialize the protocol successfully", async () => {

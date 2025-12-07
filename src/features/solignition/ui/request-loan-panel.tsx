@@ -240,6 +240,7 @@ export function RequestLoanPanel({ account }: { account: UiWalletAccount }) {
             min="0"
             placeholder={currentEstimatedCost ? currentEstimatedCost.toString() : "5.0"}
             value={principal}
+            readOnly={true}
             onChange={(e) => handlePrincipalChange(e.target.value)}
             disabled={requestLoanMutation.isPending || uploadMutation.isPending}
           />

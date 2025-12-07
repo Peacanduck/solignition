@@ -16,7 +16,7 @@ solignition = "4dWBvsjopo5Z145Xmse3Lx41G1GKpMyWMLc6p4a52T4N"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
