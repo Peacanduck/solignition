@@ -6,6 +6,7 @@ import { DepositWithdrawPanel } from './ui/deposit-withdraw-panel'
 import { RequestLoanPanel } from './ui/request-loan-panel'
 import { LoansDisplay } from './ui/loans-display'
 import { ProtocolStats } from './ui/protocol-stats'
+import { Suspense } from 'react'
 //import { AdminPanel } from './ui/admin-panal'
 //import { useProtocolConfig } from './data-access/use-protocol-config'
 
@@ -28,7 +29,10 @@ export default function SolignitionFeature() {
 
       {account ? (
         <div className="space-y-6">
-          <ProtocolStats address={""}/>
+          <Suspense>
+           <ProtocolStats address={""}/> 
+          </Suspense>
+          
 
           <Tabs defaultValue="deposit" className="w-full">
             <TabsList className={`grid w-full ${/*isAdmin*/false ? 'grid-cols-4' : 'grid-cols-3'}`}>
