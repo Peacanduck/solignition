@@ -29,7 +29,9 @@ function formatSOL(lamports: bigint, precision = 6) {
   const abs = lamports < 0n ? -lamports : lamports
   const whole = abs / 1_000_000_000n
   const rem = abs % 1_000_000_000n
-  const scaled = (rem * BigInt(10 ** precision)) / 1_000_000_000n
+  const scale = 10n ** BigInt(precision)
+  const scaled = (rem * scale) / 1_000_000_000n
+
   const decimals = scaled.toString().padStart(precision, '0')
   return `${sign}${whole.toString()}.${decimals}`
 }
@@ -56,12 +58,12 @@ export function DepositWithdrawPanel({ account }: { account: UiWalletAccount }) 
 
   const loading = depositorQuery.isLoading || configQuery.isLoading || vaultBalanceQuery.isLoading
   const vaultBalance = vaultBalanceQuery.data ?? 0n
-  const totalShares = configQuery.data?.data.totalShares ?? 0n
+  const totalShares:bigint = configQuery.data?.data.totalShares ?? 0n
 
   const calculateSharePrice = useMemo(() => {
     console.log('config:', configQuery.data?.data);
     if (totalShares === 0n) return 1_000_000_000n
-    const totalAssets = vaultBalance + (configQuery.data?.data.totalLoansOutstanding ?? 0n)
+    const totalAssets: bigint = vaultBalance + (configQuery.data?.data.totalLoansOutstanding ?? 0n)
     return (totalAssets * SHARE_DECIMALS) / totalShares
   }, [vaultBalance, totalShares])
 
@@ -108,12 +110,19 @@ export function DepositWithdrawPanel({ account }: { account: UiWalletAccount }) 
     return true
   }
 
+  function solToLamports(sol: string): bigint {
+  const [whole, frac = ''] = sol.split('.')
+  const padded = (frac + '000000000').slice(0, 9)
+  return BigInt(whole || '0') * 1_000_000_000n + BigInt(padded)
+}
+
+
   // DEPOSIT: User enters SOL → convert to shares → send shares to backend
   const handleDeposit = async () => {
     const amt = parseFloat(depositAmount)
     if (isNaN(amt) || amt <= 0) return
     
-    const solLamports = BigInt(Math.floor(amt * 1_000_000_000))
+    const solLamports = solToLamports(depositAmount);//BigInt(Math.floor(amt * 1_000_000_000))
     //const sharesToMint = sharesForAmount(solLamports)
     
     // Backend expects shares
@@ -134,7 +143,7 @@ export function DepositWithdrawPanel({ account }: { account: UiWalletAccount }) 
     const amt = parseFloat(customWithdrawAmount)
     if (isNaN(amt) || amt <= 0) return
     
-    const solLamports = BigInt(Math.floor(amt * 1_000_000_000))
+    const solLamports = solToLamports(customWithdrawAmount);//BigInt(Math.floor(amt * 1_000_000_000))
     if (!canWithdrawAmount(solLamports)) return
     
     const sharesToBurn = sharesForAmount(solLamports)
@@ -215,7 +224,7 @@ export function DepositWithdrawPanel({ account }: { account: UiWalletAccount }) 
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold">{shareAmount.toString()}</div>
-              <div className="text-xs text-muted-foreground">@ {String(Number(calculateSharePrice) / 1_000_000_000)} lamport per share</div>
+              <div className="text-xs text-muted-foreground">@ {String(calculateSharePrice / 1_000_000_000n)} lamport per share</div>
             </CardContent>
           </Card>
         </div>

@@ -1,4 +1,37 @@
+
 import { useQuery } from '@tanstack/react-query'
+import { PublicKey } from '@solana/web3.js'
+import { useSolana } from '@/components/solana/use-solana'
+import { useSolignitionProgram } from './use-program'
+
+export function useProtocolConfig() {
+  const { cluster } = useSolana()
+  const { program } = useSolignitionProgram()
+
+  return useQuery({
+    queryKey: ['protocol-config', { cluster: cluster.id }],
+    queryFn: async () => {
+      try {
+        const [configAddress] = PublicKey.findProgramAddressSync(
+          [Buffer.from('config')],
+          program.programId
+        )
+
+        const config = await program.account.protocolConfig.fetch(configAddress)
+        
+        return {
+          address: configAddress.toString(),
+          data: config,
+        }
+      } catch (error) {
+        console.error('Failed to fetch protocol config:', error)
+        return null
+      }
+    },
+    retry: false,
+  })
+}
+/*import { useQuery } from '@tanstack/react-query'
 import { useSolana } from '@/components/solana/use-solana'
 import { fetchProtocolConfig, SOLIGNITION_PROGRAM_ADDRESS } from '@project/anchor'
 import { getProgramDerivedAddress } from '@solana/kit'
@@ -28,4 +61,4 @@ export function useProtocolConfig() {
     },
     retry: false,
   })
-}
+}*/

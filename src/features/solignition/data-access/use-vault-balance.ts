@@ -1,4 +1,34 @@
+// src/features/solignition/data-access/use-vault-balance.ts
 import { useQuery } from '@tanstack/react-query'
+import { PublicKey } from '@solana/web3.js'
+import { useSolana } from '@/components/solana/use-solana'
+import { useSolignitionProgram } from './use-program'
+
+export function useVaultBalance() {
+  const { cluster } = useSolana()
+  const { program } = useSolignitionProgram()
+
+  return useQuery({
+    queryKey: ['vault-balance', { cluster: cluster.id }],
+    queryFn: async () => {
+      const [vaultAddress] = PublicKey.findProgramAddressSync(
+        [Buffer.from('vault')],
+        program.programId
+      )
+
+      try {
+        const balance = await program.provider.connection.getBalance(vaultAddress)
+        return BigInt(balance)
+      } catch (error) {
+        console.error('Failed to fetch vault balance:', error)
+        return 0n
+      }
+    },
+    refetchInterval: 15000,
+  })
+}
+
+/*import { useQuery } from '@tanstack/react-query'
 import { useSolana } from '@/components/solana/use-solana'
 import { SOLIGNITION_PROGRAM_ADDRESS } from '@project/anchor'
 import { getProgramDerivedAddress } from '@solana/kit'
@@ -33,4 +63,4 @@ export function useVaultBalance() {
     },
     refetchInterval: 15000, // Refetch every 15 seconds
   })
-}
+}*/
