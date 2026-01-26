@@ -15,31 +15,33 @@ export function useDepositMutation({ account }: { account: UiWalletAccount }) {
   return useMutation({
     mutationFn: async (amount: bigint) => {
       // Derive protocol config PDA
-      const [protocolConfig] = await getProgramDerivedAddress({
-        programAddress: SOLIGNITION_PROGRAM_ADDRESS,
-        seeds: [new TextEncoder().encode('config')],
-      })
+       const [protocolConfig] = await getProgramDerivedAddress({
+    programAddress: SOLIGNITION_PROGRAM_ADDRESS,
+    seeds: [new TextEncoder().encode('config')],
+  })
 
-      const [depositorRecord] = await getProgramDerivedAddress({
+  const [depositorRecord] = await getProgramDerivedAddress({
   programAddress: SOLIGNITION_PROGRAM_ADDRESS,
-  seeds: [Buffer.from('depositor'), getAddressEncoder().encode(signer.address)],
-});
+  seeds: [
+    new TextEncoder().encode('depositor'),
+    getAddressEncoder().encode(signer.address) // Correct byte encoding
+  ],
+})
 
-const [vault] = await getProgramDerivedAddress({
-  programAddress: SOLIGNITION_PROGRAM_ADDRESS,
-  seeds: [Buffer.from('vault')],
-});
+  const [vault] = await getProgramDerivedAddress({
+    programAddress: SOLIGNITION_PROGRAM_ADDRESS,
+    seeds: [new TextEncoder().encode('vault')],
+  })
 
-      const instruction = await getDepositInstructionAsync({
-        systemProgram: SOLIGNITION_PROGRAM_ADDRESS,
-        depositorRecord,
-        vault,
-        depositor: signer,
-        protocolConfig,
-        amount,
-      })
+  const instruction = await getDepositInstructionAsync({
+    depositor: signer,
+    depositorRecord,
+    protocolConfig,
+    vault,
+    amount,
+  })
 
-      return await signAndSend(instruction, signer)
+  return await signAndSend(instruction, signer)
     },
     onSuccess: async (signature) => {
       toastTx(signature, 'Deposit successful')
