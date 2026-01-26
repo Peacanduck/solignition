@@ -29,7 +29,7 @@ import {
 } from '../instructions';
 
 export const SOLIGNITION_PROGRAM_ADDRESS =
-  '4dWBvsjopo5Z145Xmse3Lx41G1GKpMyWMLc6p4a52T4N' as Address<'4dWBvsjopo5Z145Xmse3Lx41G1GKpMyWMLc6p4a52T4N'>;
+  'Dz4Zey62uraTxX9V9HBXpCfuFtNzdt5ULNQ1yZXh6Peh' as Address<'Dz4Zey62uraTxX9V9HBXpCfuFtNzdt5ULNQ1yZXh6Peh'>;
 
 export enum SolignitionAccount {
   DepositorRecord,
@@ -236,7 +236,7 @@ export function identifySolignitionInstruction(
 }
 
 export type ParsedSolignitionInstruction<
-  TProgram extends string = '4dWBvsjopo5Z145Xmse3Lx41G1GKpMyWMLc6p4a52T4N',
+  TProgram extends string = 'Dz4Zey62uraTxX9V9HBXpCfuFtNzdt5ULNQ1yZXh6Peh',
 > =
   | ({
       instructionType: SolignitionInstruction.ClaimAdmin;

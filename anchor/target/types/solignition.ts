@@ -5,27 +5,13 @@
  * IDL can be found at `target/idl/solignition.json`.
  */
 export type Solignition = {
-  "address": "4dWBvsjopo5Z145Xmse3Lx41G1GKpMyWMLc6p4a52T4N",
+  "address": "Dz4Zey62uraTxX9V9HBXpCfuFtNzdt5ULNQ1yZXh6Peh",
   "metadata": {
     "name": "solignition",
     "version": "0.1.0",
     "spec": "0.1.0",
     "description": "Created with Anchor"
   },
-  "docs": [
-    "Solana Developer Lending Protocol",
-    "",
-    "This protocol enables SOL lending for developer program deployments with:",
-    "- Trustless upgrade authority management",
-    "- Automated loan recovery and repayment",
-    "- Fair yield distribution to depositors",
-    "- Secure fee collection and distribution",
-    "",
-    "Recovery Flow for Expired Loans:",
-    "1. Call `recover_loan` when loan expires to mark it recovered",
-    "2. Off-chain deployer can close the program account",
-    "3. Call `return_reclaimed_sol` to return recovered SOL to vault"
-  ],
   "instructions": [
     {
       "name": "claimAdmin",
@@ -128,9 +114,6 @@ export type Solignition = {
     },
     {
       "name": "deposit",
-      "docs": [
-        "Deposit SOL into the vault"
-      ],
       "discriminator": [
         242,
         35,
@@ -213,38 +196,6 @@ export type Solignition = {
         {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
-        },
-        {
-          "name": "eventAuthority",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  95,
-                  95,
-                  101,
-                  118,
-                  101,
-                  110,
-                  116,
-                  95,
-                  97,
-                  117,
-                  116,
-                  104,
-                  111,
-                  114,
-                  105,
-                  116,
-                  121
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "program"
         }
       ],
       "args": [
@@ -256,9 +207,6 @@ export type Solignition = {
     },
     {
       "name": "initialize",
-      "docs": [
-        "Initialize the protocol with admin and configuration"
-      ],
       "discriminator": [
         175,
         175,
@@ -426,9 +374,6 @@ export type Solignition = {
     },
     {
       "name": "recoverLoan",
-      "docs": [
-        "mark expired loan for recovery"
-      ],
       "discriminator": [
         16,
         58,
@@ -560,9 +505,6 @@ export type Solignition = {
     },
     {
       "name": "repayLoan",
-      "docs": [
-        "Repay an active loan with interest"
-      ],
       "discriminator": [
         224,
         93,
@@ -708,9 +650,6 @@ export type Solignition = {
     },
     {
       "name": "requestLoan",
-      "docs": [
-        "Request a loan and pay upfront admin fee"
-      ],
       "discriminator": [
         120,
         2,
@@ -870,9 +809,6 @@ export type Solignition = {
     },
     {
       "name": "returnReclaimedSol",
-      "docs": [
-        "Return reclaimed SOL from expired/recovered loans back to vault"
-      ],
       "discriminator": [
         220,
         56,
@@ -1003,9 +939,6 @@ export type Solignition = {
     },
     {
       "name": "setDeployedProgram",
-      "docs": [
-        "Set the deployed program pubkey after off-chain deployment"
-      ],
       "discriminator": [
         172,
         130,
@@ -1115,9 +1048,6 @@ export type Solignition = {
     },
     {
       "name": "setPaused",
-      "docs": [
-        "Admin function to pause/unpause protocol"
-      ],
       "discriminator": [
         91,
         60,
@@ -1314,9 +1244,6 @@ export type Solignition = {
     },
     {
       "name": "updateConfig",
-      "docs": [
-        "Admin function to update configuration"
-      ],
       "discriminator": [
         29,
         158,

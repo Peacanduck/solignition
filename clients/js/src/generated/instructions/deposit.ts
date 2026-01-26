@@ -58,8 +58,6 @@ export type DepositInstruction<
   TAccountSystemProgram extends
     | string
     | AccountMeta<string> = '11111111111111111111111111111111',
-  TAccountEventAuthority extends string | AccountMeta<string> = string,
-  TAccountProgram extends string | AccountMeta<string> = string,
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -81,12 +79,6 @@ export type DepositInstruction<
       TAccountSystemProgram extends string
         ? ReadonlyAccount<TAccountSystemProgram>
         : TAccountSystemProgram,
-      TAccountEventAuthority extends string
-        ? ReadonlyAccount<TAccountEventAuthority>
-        : TAccountEventAuthority,
-      TAccountProgram extends string
-        ? ReadonlyAccount<TAccountProgram>
-        : TAccountProgram,
       ...TRemainingAccounts,
     ]
   >;
@@ -131,16 +123,12 @@ export type DepositAsyncInput<
   TAccountProtocolConfig extends string = string,
   TAccountVault extends string = string,
   TAccountSystemProgram extends string = string,
-  TAccountEventAuthority extends string = string,
-  TAccountProgram extends string = string,
 > = {
   depositor: TransactionSigner<TAccountDepositor>;
   depositorRecord?: Address<TAccountDepositorRecord>;
   protocolConfig?: Address<TAccountProtocolConfig>;
   vault?: Address<TAccountVault>;
   systemProgram?: Address<TAccountSystemProgram>;
-  eventAuthority?: Address<TAccountEventAuthority>;
-  program: Address<TAccountProgram>;
   amount: DepositInstructionDataArgs['amount'];
 };
 
@@ -150,8 +138,6 @@ export async function getDepositInstructionAsync<
   TAccountProtocolConfig extends string,
   TAccountVault extends string,
   TAccountSystemProgram extends string,
-  TAccountEventAuthority extends string,
-  TAccountProgram extends string,
   TProgramAddress extends Address = typeof SOLIGNITION_PROGRAM_ADDRESS,
 >(
   input: DepositAsyncInput<
@@ -159,9 +145,7 @@ export async function getDepositInstructionAsync<
     TAccountDepositorRecord,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountSystemProgram,
-    TAccountEventAuthority,
-    TAccountProgram
+    TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress }
 ): Promise<
@@ -171,9 +155,7 @@ export async function getDepositInstructionAsync<
     TAccountDepositorRecord,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountSystemProgram,
-    TAccountEventAuthority,
-    TAccountProgram
+    TAccountSystemProgram
   >
 > {
   // Program address.
@@ -186,8 +168,6 @@ export async function getDepositInstructionAsync<
     protocolConfig: { value: input.protocolConfig ?? null, isWritable: true },
     vault: { value: input.vault ?? null, isWritable: true },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
-    eventAuthority: { value: input.eventAuthority ?? null, isWritable: false },
-    program: { value: input.program ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -229,19 +209,6 @@ export async function getDepositInstructionAsync<
     accounts.systemProgram.value =
       '11111111111111111111111111111111' as Address<'11111111111111111111111111111111'>;
   }
-  if (!accounts.eventAuthority.value) {
-    accounts.eventAuthority.value = await getProgramDerivedAddress({
-      programAddress,
-      seeds: [
-        getBytesEncoder().encode(
-          new Uint8Array([
-            95, 95, 101, 118, 101, 110, 116, 95, 97, 117, 116, 104, 111, 114,
-            105, 116, 121,
-          ])
-        ),
-      ],
-    });
-  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, 'programId');
   return Object.freeze({
@@ -251,8 +218,6 @@ export async function getDepositInstructionAsync<
       getAccountMeta(accounts.protocolConfig),
       getAccountMeta(accounts.vault),
       getAccountMeta(accounts.systemProgram),
-      getAccountMeta(accounts.eventAuthority),
-      getAccountMeta(accounts.program),
     ],
     data: getDepositInstructionDataEncoder().encode(
       args as DepositInstructionDataArgs
@@ -264,9 +229,7 @@ export async function getDepositInstructionAsync<
     TAccountDepositorRecord,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountSystemProgram,
-    TAccountEventAuthority,
-    TAccountProgram
+    TAccountSystemProgram
   >);
 }
 
@@ -276,16 +239,12 @@ export type DepositInput<
   TAccountProtocolConfig extends string = string,
   TAccountVault extends string = string,
   TAccountSystemProgram extends string = string,
-  TAccountEventAuthority extends string = string,
-  TAccountProgram extends string = string,
 > = {
   depositor: TransactionSigner<TAccountDepositor>;
   depositorRecord: Address<TAccountDepositorRecord>;
   protocolConfig: Address<TAccountProtocolConfig>;
   vault: Address<TAccountVault>;
   systemProgram?: Address<TAccountSystemProgram>;
-  eventAuthority: Address<TAccountEventAuthority>;
-  program: Address<TAccountProgram>;
   amount: DepositInstructionDataArgs['amount'];
 };
 
@@ -295,8 +254,6 @@ export function getDepositInstruction<
   TAccountProtocolConfig extends string,
   TAccountVault extends string,
   TAccountSystemProgram extends string,
-  TAccountEventAuthority extends string,
-  TAccountProgram extends string,
   TProgramAddress extends Address = typeof SOLIGNITION_PROGRAM_ADDRESS,
 >(
   input: DepositInput<
@@ -304,9 +261,7 @@ export function getDepositInstruction<
     TAccountDepositorRecord,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountSystemProgram,
-    TAccountEventAuthority,
-    TAccountProgram
+    TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress }
 ): DepositInstruction<
@@ -315,9 +270,7 @@ export function getDepositInstruction<
   TAccountDepositorRecord,
   TAccountProtocolConfig,
   TAccountVault,
-  TAccountSystemProgram,
-  TAccountEventAuthority,
-  TAccountProgram
+  TAccountSystemProgram
 > {
   // Program address.
   const programAddress = config?.programAddress ?? SOLIGNITION_PROGRAM_ADDRESS;
@@ -329,8 +282,6 @@ export function getDepositInstruction<
     protocolConfig: { value: input.protocolConfig ?? null, isWritable: true },
     vault: { value: input.vault ?? null, isWritable: true },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
-    eventAuthority: { value: input.eventAuthority ?? null, isWritable: false },
-    program: { value: input.program ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -354,8 +305,6 @@ export function getDepositInstruction<
       getAccountMeta(accounts.protocolConfig),
       getAccountMeta(accounts.vault),
       getAccountMeta(accounts.systemProgram),
-      getAccountMeta(accounts.eventAuthority),
-      getAccountMeta(accounts.program),
     ],
     data: getDepositInstructionDataEncoder().encode(
       args as DepositInstructionDataArgs
@@ -367,9 +316,7 @@ export function getDepositInstruction<
     TAccountDepositorRecord,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountSystemProgram,
-    TAccountEventAuthority,
-    TAccountProgram
+    TAccountSystemProgram
   >);
 }
 
@@ -384,8 +331,6 @@ export type ParsedDepositInstruction<
     protocolConfig: TAccountMetas[2];
     vault: TAccountMetas[3];
     systemProgram: TAccountMetas[4];
-    eventAuthority: TAccountMetas[5];
-    program: TAccountMetas[6];
   };
   data: DepositInstructionData;
 };
@@ -398,7 +343,7 @@ export function parseDepositInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>
 ): ParsedDepositInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 7) {
+  if (instruction.accounts.length < 5) {
     // TODO: Coded error.
     throw new Error('Not enough accounts');
   }
@@ -416,8 +361,6 @@ export function parseDepositInstruction<
       protocolConfig: getNextAccount(),
       vault: getNextAccount(),
       systemProgram: getNextAccount(),
-      eventAuthority: getNextAccount(),
-      program: getNextAccount(),
     },
     data: getDepositInstructionDataDecoder().decode(instruction.data),
   };
