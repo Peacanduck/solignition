@@ -218,6 +218,30 @@ function publicKeyToString(pubkey: any): string {
 }
 
 // Helper to normalize loan data from Anchor format
+
+function normalizeLoanData(rawData: any): Loan {
+  return {
+    ...rawData,
+    loanId: bnToBigInt(rawData.loanId),
+    borrower: publicKeyToString(rawData.borrower),
+    programPubkey: publicKeyToString(rawData.programPubkey),
+    authorityPda: publicKeyToString(rawData.authorityPda),
+    principal: bnToBigInt(rawData.principal),
+    duration: bnToBigInt(rawData.duration),
+    adminFeePaid: bnToBigInt(rawData.adminFeePaid),
+    startTs: bnToBigInt(rawData.startTs),
+    state: parseState(rawData.state),
+    interestRateBps: Number(rawData.interestRateBps),
+    repaidTs: rawData.repaidTs && bnToBigInt(rawData.repaidTs) !== 0n
+      ? { value: bnToBigInt(rawData.repaidTs) } 
+      : null,
+    recoveredTs: bnToBigInt(rawData.recoveredTs),
+    interestPaid: bnToBigInt(rawData.interestPaid),
+    reclaimedAmount: bnToBigInt(rawData.reclaimedAmount),
+    reclaimedTs: bnToBigInt(rawData.reclaimedTs),
+  } as Loan
+}
+/* 
 function normalizeLoanData(rawData: any): Loan {
   return {
     ...rawData,
@@ -238,7 +262,7 @@ function normalizeLoanData(rawData: any): Loan {
     reclaimedAmount: bnToBigInt(rawData.reclaimedAmount),
     reclaimedTs: bnToBigInt(rawData.reclaimedTs),
   } as Loan
-}
+}*/
 
 /**
  * Hook to fetch loans

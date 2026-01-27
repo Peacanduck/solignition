@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
-import { AnchorProvider, Program } from '@coral-xyz/anchor'
+import { AnchorProvider, Program, setProvider } from '@coral-xyz/anchor'
 import { Connection, PublicKey } from '@solana/web3.js'
 import { useSolana } from '@/components/solana/use-solana'
+import { useConnection, useAnchorWallet } from '@solana/wallet-adapter-react';
 import type { Solignition } from '../../../../anchor/target/types/solignition'
 import idl from '../../../../anchor/target/idl/solignition.json'
 
@@ -23,7 +24,8 @@ function getRpcUrl(clusterId: string): string {
 }
 
 export function useSolignitionProgram() {
-  const { cluster } = useSolana()
+  const { cluster, wallets} = useSolana()
+ // const wallet  = useAnchorWallet()
 
   const program = useMemo(() => {
     const connection = new Connection(getRpcUrl(cluster.id), 'confirmed')
@@ -34,12 +36,13 @@ export function useSolignitionProgram() {
       signAllTransactions: async (txs: any[]) => txs,
     }
     
-    const provider = new AnchorProvider(connection, dummyWallet as any, {
+    const provider = new AnchorProvider(connection, wallets[0] as any, {
       commitment: 'confirmed'
     })
+    setProvider(provider);
 
     return new Program<Solignition>(idl as Solignition, provider)
-  }, [cluster.id])
+  }, [cluster.id, wallets])
 
   return { program, programId: PROGRAM_ID }
 }

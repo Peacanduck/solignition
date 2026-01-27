@@ -65,7 +65,7 @@ export function DepositWithdrawPanel({ account }: { account: UiWalletAccount }) 
     if (totalShares === 0n) return 1_000_000_000n
     const totalAssets: bigint = vaultBalance + (configQuery.data?.data.totalLoansOutstanding ?? 0n)
     return (totalAssets * SHARE_DECIMALS) / totalShares
-  }, [vaultBalance, totalShares])
+  }, [vaultBalance, totalShares, configQuery.data])
 
   // Convert SOL amount to shares needed
   const sharesForAmount = (amountLamports: bigint) => {

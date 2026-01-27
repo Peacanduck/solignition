@@ -22,10 +22,20 @@ export function useDepositorRecord(owner?: string) {
       try {
         const record = await program.account.depositorRecord.fetch(depositorRecordAddress)
         
+
         return {
           address: depositorRecordAddress.toString(),
-          data: record,
+          data: {
+            ...record,
+            depositedAmount: BigInt(record.depositedAmount.toString()),
+            shareAmount: BigInt(record.shareAmount.toString()),
+            lastDepositTs: BigInt(record.lastUpdateTs.toString()),
+          },
         }
+       /* return {
+          address: depositorRecordAddress.toString(),
+          data: record,
+        }*/
       } catch (error) {
         console.log('Depositor record not found:', error)
         return null

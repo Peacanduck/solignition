@@ -1,17 +1,21 @@
 // src/features/solignition/data-access/use-deposit-mutation.ts
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { UiWalletAccount } from '@wallet-ui/react'
+/*import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { UiWalletAccount, useWalletUiSigner } from '@wallet-ui/react'
 import { PublicKey, SystemProgram } from '@solana/web3.js'
 import { BN } from '@coral-xyz/anchor'
 import { toast } from 'sonner'
 import { useSolana } from '@/components/solana/use-solana'
 import { toastTx } from '@/components/toast-tx'
 import { useSolignitionProgram } from './use-program'
+import { useWalletUiSignAndSend } from '@wallet-ui/react-gill'
 
 export function useDepositMutation({ account }: { account: UiWalletAccount }) {
-  const { cluster } = useSolana()
+  const { cluster, client } = useSolana()
   const queryClient = useQueryClient()
   const { program } = useSolignitionProgram()
+  const signer = useWalletUiSigner({ account })
+  const signAndSend = useWalletUiSignAndSend()
+  
 
   return useMutation({
     mutationFn: async (amount: bigint) => {
@@ -31,8 +35,9 @@ export function useDepositMutation({ account }: { account: UiWalletAccount }) {
         [Buffer.from('vault')],
         program.programId
       )
-
-      const tx = await program.methods
+      
+      const signature = 
+      await program.methods
         .deposit(new BN(amount.toString()))
         .accounts({
           depositor: depositorPubkey,
@@ -41,9 +46,11 @@ export function useDepositMutation({ account }: { account: UiWalletAccount }) {
           vault,
           systemProgram: SystemProgram.programId,
         })
+        .signers([])
         .rpc()
-
-      return tx
+                
+      
+      return signature
     },
     onSuccess: async (signature) => {
       toastTx(signature, 'Deposit successful')
@@ -60,8 +67,8 @@ export function useDepositMutation({ account }: { account: UiWalletAccount }) {
       })
     },
   })
-}
-/*import { useMutation, useQueryClient } from '@tanstack/react-query'
+}*/
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { UiWalletAccount, useWalletUiSigner } from '@wallet-ui/react'
 import { useWalletUiSignAndSend } from '@wallet-ui/react-gill'
 import { getDepositInstructionAsync, SOLIGNITION_PROGRAM_ADDRESS } from '@project/anchor'
@@ -125,4 +132,4 @@ export function useDepositMutation({ account }: { account: UiWalletAccount }) {
           toastTx("erer", `Error Deposit Unsuccessful: ${error.message}`)
         },
   })
-}*/
+}

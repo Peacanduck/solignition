@@ -19,10 +19,28 @@ export function useProtocolConfig() {
 
         const config = await program.account.protocolConfig.fetch(configAddress)
         
+
         return {
           address: configAddress.toString(),
-          data: config,
+          data: {
+            admin: config.admin.toString(),
+            deployer: config.deployer.toString(),
+            treasury: config.treasury.toString(),
+            totalShares: BigInt(config.totalShares.toString()),
+            totalLoansOutstanding: BigInt(config.totalLoansOutstanding.toString()),
+            totalYieldDistributed: BigInt(config.totalYieldDistributed.toString()),
+            loanCounter: BigInt(config.loanCounter.toString()),
+            defaultInterestRateBps: Number(config.defaultInterestRateBps),
+            defaultAdminFeeBps: Number(config.defaultAdminFeeBps),
+            adminFeeSplitBps: Number(config.adminFeeSplitBps),
+            isPaused: config.isPaused,
+            bump: config.bump,
+          },
         }
+        /*return {
+          address: configAddress.toString(),
+          data: config,
+        }*/
       } catch (error) {
         console.error('Failed to fetch protocol config:', error)
         return null
