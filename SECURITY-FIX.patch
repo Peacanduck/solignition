@@ -1,0 +1,43 @@
+diff --git a/anchor/programs/solignition/src/lib.rs b/anchor/programs/solignition/src/lib.rs
+index xxx..yyy 100644
+--- a/anchor/programs/solignition/src/lib.rs
++++ b/anchor/programs/solignition/src/lib.rs
+@@ -30,6 +30,9 @@ pub const PROTOCOL_CONFIG_SEED: &[u8] = b"config";
+ pub const SECONDS_PER_YEAR: u64 = 31_536_000;
+ const SHARE_DECIMALS: u128 = 1_000_000_000; // 1e9 precision
+ 
++// Security: Minimum first deposit to prevent inflation attacks
++const MIN_FIRST_DEPOSIT: u64 = 10_000_000; // 0.01 SOL
++
+ /// Solana Developer Lending Protocol
+ /// 
+ /// This protocol enables SOL lending for developer program deployments with:
+@@ -872,6 +875,11 @@ fn calculate_interest(principal: u64, rate_bps: u16, elapsed_seconds: u64, dura
+ fn calculate_shares_for_deposit(config: &ProtocolConfig, amount: u64, vault_lamports: u64) -> u64 {
+     if config.total_shares == 0 {
+         // First deposit: 1:1 ratio
++        // Security: Require minimum deposit to prevent share manipulation
++        if amount < MIN_FIRST_DEPOSIT {
++            panic!("First deposit must be at least 0.01 SOL to prevent inflation attacks");
++        }
+         return amount;
+     }
+     
+@@ -886,6 +894,16 @@ fn calculate_shares_for_deposit(config: &ProtocolConfig, amount: u64, vault_lam
+         .unwrap()) as u64
+ }
+ 
++// Alternative fix: Use virtual offsets (more robust)
++/*
++const VIRTUAL_SHARES: u128 = 10_000_000_000;  // 10 SOL worth
++const VIRTUAL_ASSETS: u128 = 10_000_000_000;
++
++fn calculate_share_price(config: &ProtocolConfig, vault_lamports: u64) -> u128 {
++    let total_shares = (config.total_shares as u128) + VIRTUAL_SHARES;
++    let total_assets = (vault_lamports as u128) + (config.total_loans_outstanding as u128) + VIRTUAL_ASSETS;
++    (total_assets * 1_000_000_000) / total_shares
++}
++*/
+ 
+ /// Calculate asset value for a share amount
+ fn calculate_assets_for_shares(config: &ProtocolConfig, shares: u64 , vault_lamports: u64) -> u64 {
