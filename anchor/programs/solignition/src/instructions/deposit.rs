@@ -9,7 +9,7 @@ use crate::events::Deposited;
 /// Deposit SOL into the vault
     pub fn process_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         require!(!ctx.accounts.protocol_config.is_paused, ErrorCode::ProtocolPaused);
-        require!(amount > 0, ErrorCode::InvalidAmount);
+        require_gt!(amount , 0 , ErrorCode::InvalidAmount);
 
         let protocol_config = &mut ctx.accounts.protocol_config;
         // Calculate shares to mint based on current share price

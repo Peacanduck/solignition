@@ -1,4 +1,6 @@
 [toolchain]
+anchor_version = "0.31.1"
+solana_version = "2.3.0"
 package_manager = "yarn"
 
 [features]
@@ -9,7 +11,7 @@ skip-lint = false
 solignition = "Dz4Zey62uraTxX9V9HBXpCfuFtNzdt5ULNQ1yZXh6Peh"
 
 [programs.localnet]
-solignition = "4dWBvsjopo5Z145Xmse3Lx41G1GKpMyWMLc6p4a52T4N"
+solignition = "Dz4Zey62uraTxX9V9HBXpCfuFtNzdt5ULNQ1yZXh6Peh"
 
 [registry]
 url = "https://api.apr.dev"

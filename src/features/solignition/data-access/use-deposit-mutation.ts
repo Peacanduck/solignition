@@ -31,7 +31,6 @@ const [vault] = await getProgramDerivedAddress({
 });
 
       const instruction = await getDepositInstructionAsync({
-        systemProgram: SOLIGNITION_PROGRAM_ADDRESS,
         depositorRecord,
         vault,
         depositor: signer,

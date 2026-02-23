@@ -313,7 +313,7 @@ describe("solignition", () => {
       }
     });
   });
-/*
+/**/ 
   describe("withdraw", () => {
     it("should allow depositor to withdraw SOL", async () => {
       const withdrawAmount = new anchor.BN(5 * LAMPORTS_PER_SOL);
@@ -394,7 +394,7 @@ describe("solignition", () => {
         assert.ok(hasError, `Expected seeds or unauthorized error, got: ${errorStr}`);
       }
     });
-  });*/
+  });
 
   describe("request_loan", () => {
     let loanId: number;
