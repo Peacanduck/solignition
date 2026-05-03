@@ -1,4 +1,4 @@
-action "solignition_protocol_initialized" "svm::deploy_subgraph" {
+/*action "solignition_protocol_initialized" "svm::deploy_subgraph" {
     program_id = action.deploy_solignition.program_id
     program_idl = action.deploy_solignition.program_idl
     slot = action.deploy_solignition.slot
@@ -139,4 +139,4 @@ action "index_loans" "svm::deploy_subgraph" {
             account_name="loan"
         }
     }
-}
+}*/
