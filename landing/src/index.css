@@ -2,72 +2,55 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Backgrounds */
+  --bg:    #0a0d0c;   /* page */
+  --bg-1:  #0f1311;   /* card */
+  --bg-2:  #131816;   /* card-2 */
+  --bg-3:  #1a201d;   /* hover */
+
+  /* Ink (text) */
+  --ink:   #e8ede9;   /* primary */
+  --ink-2: #b4bcb6;   /* secondary */
+  --ink-3: #6e7570;   /* tertiary / muted */
+  --ink-4: #444844;   /* faint */
+
+  /* Lines / dividers */
+  --line:   #1f2421;
+  --line-2: #2a302c;
+  --line-3: #3a4039;
+
+  /* Accent (single color, oklch for tunability) */
+  --accent:      oklch(0.78 0.17 150);
+  --accent-2:    oklch(0.65 0.16 150);
+  --accent-soft: oklch(0.32 0.07 150 / 0.18);
+  --accent-edge: oklch(0.5  0.13 150 / 0.6);
+
+  /* Status */
+  --warn:   oklch(0.78 0.16 75);
+  --danger: oklch(0.65 0.21 25);
+}
+
 @layer base {
-  * {
-    scroll-behavior: smooth;
-  }
-  
+  html { scroll-behavior: smooth; }
   body {
-    @apply bg-slate-950 text-white;
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 
-      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    @apply bg-[var(--bg)] text-[var(--ink)];
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv11';
   }
+  ::selection { background: var(--accent-soft); color: var(--ink); }
 }
 
 @layer utilities {
-  /* Custom animations for robots */
-  @keyframes float {
-    0%, 100% { 
-      transform: translateY(0px) rotate(0deg); 
-    }
-    50% { 
-      transform: translateY(-20px) rotate(5deg); 
-    }
-  }
-  
-  @keyframes float-delayed {
-    0%, 100% { 
-      transform: translateY(0px) rotate(12deg); 
-    }
-    50% { 
-      transform: translateY(-25px) rotate(18deg); 
-    }
-  }
-  
-  @keyframes float-slow {
-    0%, 100% { 
-      transform: translateY(0px) rotate(-6deg); 
-    }
-  50% { 
-      transform: translateY(-15px) rotate(-2deg); 
-    }
-  }
-  
-  @keyframes pulse-slow {
-    0%, 100% { 
-      opacity: 0.05; 
-    }
-    50% { 
-      opacity: 0.08; 
-    }
-  }
-  
-  .animate-float {
-    animation: float 6s ease-in-out infinite;
-  }
-  
-  .animate-float-delayed {
-    animation: float-delayed 8s ease-in-out infinite;
-  }
-  
-  .animate-float-slow {
-    animation: float-slow 7s ease-in-out infinite;
-  }
-  
-  .animate-pulse-slow {
-    animation: pulse-slow 4s ease-in-out infinite;
-  }
+  .font-mono { font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace; }
+  .tabular { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+  .animate-blink { animation: term-blink 1s steps(1) infinite; }
+}
+
+@keyframes term-blink {
+  50% { opacity: 0; }
 }
