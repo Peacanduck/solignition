@@ -13,7 +13,7 @@ module.exports = {
       NODE_ENV: "production",
       RPC_URL:"https://api.devnet.solana.com",
       WS_URL:"",
-      PROGRAM_ID:"4dWBvsjopo5Z145Xmse3Lx41G1GKpMyWMLc6p4a52T4N",
+      PROGRAM_ID:"HVzpjSxwECnb6uY9Jnia48oJp4xrQiz5jgc5hZC5df63",
       CLUSTER:"devnet",
       DEPLOYER_KEYPAIR_PATH:"/home/ubuntu/solignition/deployer/deployerKey.json",
       ADMIN_KEYPAIR_PATH:"/home/ubuntu/solignition/deployer/deployerKey.json",
