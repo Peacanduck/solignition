@@ -1,5 +1,5 @@
 import { ReactNode } from 'react'
-import { createSolanaDevnet, createSolanaLocalnet, createWalletUiConfig, WalletUi } from '@wallet-ui/react'
+import { createSolanaDevnet, createWalletUiConfig, WalletUi } from '@wallet-ui/react'
 import { WalletUiGillProvider } from '@wallet-ui/react-gill'
 import { solanaMobileWalletAdapter } from './solana-mobile-wallet-adapter'
 
