@@ -6,7 +6,7 @@ import { useUploadProgramFile } from '../data-access/use-upload-program-file'
 import { formatSOL } from '../lib/format'
 import type { WizardAction, WizardState } from './use-borrow-wizard'
 
-const MAX_BYTES = 1024 * 1024 // 1 MB; TODO: pull from server config
+const MAX_BYTES = 1024 * 1024 * 10 // 10 MB; TODO: pull from server config
 
 export function StepUpload({
   state,
