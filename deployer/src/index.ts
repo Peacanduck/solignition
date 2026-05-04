@@ -95,6 +95,7 @@ interface DeploymentRecord {
   binaryPath?: string;
   principal: string;
   programAccountOpen: boolean;
+  cluster: string;        // 'devnet' | 'localnet' | 'mainnet-beta'
 }
 
 interface FileUploadRecord {
@@ -1124,7 +1125,11 @@ public async checkPendingLoansForDeployment(): Promise<void> {
           console.log('program ', deployment.programId);
           
           //check if loan is expired 
-          let isExpired = Date.now() > (loan.startTs + loan.duration);
+          //let isExpired = Date.now() > (loan.startTs + loan.duration);
+          const nowSec = Math.floor(Date.now() / 1000);
+          const expirySec = loan.startTs.toNumber() + loan.duration.toNumber();
+          const isExpired = nowSec > expirySec;
+
           if (!deployment.programAccountOpen && !isExpired) {
             logger.debug('Deployment record exists but no programId', {
               loanId,
@@ -1148,6 +1153,16 @@ public async checkPendingLoansForDeployment(): Promise<void> {
               deploymentStatus: deployment.status,
             });
             continue;
+          }
+
+          const programInfo = await this.connection.getAccountInfo(new PublicKey(deployment.programId),'confirmed',);
+          if (!programInfo || !programInfo.executable) {
+            logger.error('Refusing to setDeployedProgram: program not found or not executable on this cluster', {
+              loanId,
+              programId: deployment.programId,
+              cluster: config.cluster,
+            });
+            continue; // or mark deployment as needs-redeploy
           }
           
           try {
@@ -1967,13 +1982,38 @@ private async callReturnReclaimedSol(
       
       const [programData] = PublicKey.findProgramAddressSync([loanInfo.programPubkey.toBuffer()], BPF_UPGRADEABLE_LOADER);
 
-       logger.info("\n🔑 Authority Transfer Details:");
-       logger.info("Deployed Program:", loanInfo.programPubkey.toString());
-       logger.info("Program Data:", programData.toString());
-       logger.info("Current Authority (Deployer):", this.deployerWallet.publicKey.toString());
-       logger.info("New Authority (Borrower):", borrower.toString());
+       logger.info(`\n🔑 Authority Transfer Details:`);
+       logger.info(`Deployed Program: ${loanInfo.programPubkey.toString()}`);
+       logger.info(`Program Data: ${programData.toString()}`);
+       logger.info(`Current Authority (Deployer): ${this.deployerWallet.publicKey.toString()}`);
+       logger.info(`New Authority (Borrower): ${borrower.toString()}`);
 
-      const tx = await this.program.methods
+       // Before invoking, verify the programdata account is what we think
+       const programDataInfo = await this.connection.getAccountInfo(programData, 'confirmed');
+       if (!programDataInfo) {
+         throw new Error(`ProgramData account ${programData.toString()} does not exist`);
+       }
+       if (!programDataInfo.owner.equals(BPF_UPGRADEABLE_LOADER)) {
+         throw new Error(`ProgramData not owned by BPF Upgradeable Loader, owner=${programDataInfo.owner.toString()}`);
+       }
+       // First 4 bytes are the UpgradeableLoaderState discriminator:
+       // 0 = Uninitialized, 1 = Buffer, 2 = Program, 3 = ProgramData
+       const discriminator = programDataInfo.data.readUInt32LE(0);
+       logger.info(`ProgramData state discriminator: ${discriminator}`);
+       if (discriminator !== 3) {
+         throw new Error(`Account is not in ProgramData state, got discriminator ${discriminator}`);
+       }
+       // Bytes 4-12 are the slot (u64 LE), byte 12 is Option<Pubkey> tag, bytes 13-45 are the authority
+       const hasAuth = programDataInfo.data[12] === 1;
+       if (hasAuth) {
+         const currentAuth = new PublicKey(programDataInfo.data.slice(13, 45));
+         logger.info(`Current upgrade authority on-chain: ${currentAuth.toString()}`);
+         if (!currentAuth.equals(this.deployerWallet.publicKey)) {
+           throw new Error(`Authority mismatch: chain=${currentAuth} deployer=${this.deployerWallet.publicKey}`);
+         }
+       }       
+
+      const tx = await this.program.methods //remove "this." ?
         .transferAuthorityToBorrower(loanIdBn)
         .accountsPartial({
           deployer: this.deployerWallet.publicKey,

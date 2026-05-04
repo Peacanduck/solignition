@@ -13,7 +13,7 @@ pub mod error;
 pub mod events;
 pub mod utils;
 
-declare_id!("Dz4Zey62uraTxX9V9HBXpCfuFtNzdt5ULNQ1yZXh6Peh");
+declare_id!("HVzpjSxwECnb6uY9Jnia48oJp4xrQiz5jgc5hZC5df63");
 
 #[program]
 pub mod solignition {

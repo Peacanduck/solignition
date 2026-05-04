@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/solignition.json`.
  */
 export type Solignition = {
-  "address": "Dz4Zey62uraTxX9V9HBXpCfuFtNzdt5ULNQ1yZXh6Peh",
+  "address": "HVzpjSxwECnb6uY9Jnia48oJp4xrQiz5jgc5hZC5df63",
   "metadata": {
     "name": "solignition",
     "version": "0.1.0",
@@ -1778,6 +1778,16 @@ export type Solignition = {
       "code": 6019,
       "name": "noYieldToClaim",
       "msg": "No yield to claim"
+    },
+    {
+      "code": 6020,
+      "name": "loanExpired",
+      "msg": "Loan has expired and can no longer be repaid"
+    },
+    {
+      "code": 6021,
+      "name": "clockError",
+      "msg": "Error calculating elapsed time"
     }
   ],
   "types": [

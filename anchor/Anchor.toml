@@ -8,10 +8,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-solignition = "Dz4Zey62uraTxX9V9HBXpCfuFtNzdt5ULNQ1yZXh6Peh"
+solignition = "HVzpjSxwECnb6uY9Jnia48oJp4xrQiz5jgc5hZC5df63"
 
 [programs.localnet]
-solignition = "Dz4Zey62uraTxX9V9HBXpCfuFtNzdt5ULNQ1yZXh6Peh"
+solignition = "HVzpjSxwECnb6uY9Jnia48oJp4xrQiz5jgc5hZC5df63"
 
 [registry]
 url = "https://api.apr.dev"

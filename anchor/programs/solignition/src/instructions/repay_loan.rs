@@ -17,7 +17,11 @@ use crate::events::LoanRepaid;
     require!(loan.loan_id == loan_id, ErrorCode::InvalidLoanId);
 
     let clock = Clock::get()?;
-    let elapsed = (clock.unix_timestamp - loan.start_ts) as u64;
+    let elapsed = clock.unix_timestamp
+    .checked_sub(loan.start_ts)
+    .ok_or(ErrorCode::ClockError)? as u64;
+
+    require!(elapsed < loan.duration as u64, ErrorCode::LoanExpired);
     
     // Calculate interest
     let interest = calculate_interest(

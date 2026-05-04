@@ -42,4 +42,8 @@ pub enum ErrorCode {
     MathOverflow,
     #[msg("No yield to claim")]
     NoYieldToClaim,
+    #[msg("Loan has expired and can no longer be repaid")]
+    LoanExpired,
+    #[msg("Error calculating elapsed time")]
+    ClockError,
 }
