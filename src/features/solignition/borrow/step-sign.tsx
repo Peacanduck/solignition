@@ -51,7 +51,7 @@ export function StepSign({
     try {
       const sig = await requestLoan.mutateAsync({
         principal,
-        duration: BigInt(state.duration * 86400), // change for testing expirey 300n 5min
+        duration: BigInt(state.duration * 86400), // TEST change for testing expirey 300n 5min
         interestRateBps: state.interestRateBps,
         adminFeeBps,
         fileId: state.fileId,
