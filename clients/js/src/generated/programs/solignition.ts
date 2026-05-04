@@ -29,7 +29,7 @@ import {
 } from '../instructions';
 
 export const SOLIGNITION_PROGRAM_ADDRESS =
-  'Dz4Zey62uraTxX9V9HBXpCfuFtNzdt5ULNQ1yZXh6Peh' as Address<'Dz4Zey62uraTxX9V9HBXpCfuFtNzdt5ULNQ1yZXh6Peh'>;
+  'HVzpjSxwECnb6uY9Jnia48oJp4xrQiz5jgc5hZC5df63' as Address<'HVzpjSxwECnb6uY9Jnia48oJp4xrQiz5jgc5hZC5df63'>;
 
 export enum SolignitionAccount {
   DepositorRecord,
