@@ -20,9 +20,20 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
+    "erasableSyntaxOnly": false,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+
+    /* JSON imports for the Anchor IDL */
+    "resolveJsonModule": true,
+
+    /* Cross-package aliases */
+    "baseUrl": ".",
+    "paths": {
+      "@project/anchor": ["../clients/js/src"],
+      "@project/anchor/*": ["../clients/js/src/*"],
+      
+    }
   },
-  "include": ["src"]
+  "include": ["src", "../clients/js/src", "../anchor/target/types/solignition.ts"]
 }

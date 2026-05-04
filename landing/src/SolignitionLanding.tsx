@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AnchorHTMLAttributes, ReactNode } from 'react';
+import { useChainData, type FeedRow, type ChainStats } from './data/use-chain-data';
 
 const APP_URL = 'https://app.solignition.xyz';
 const DOCS_URL = 'https://docs.solignition.xyz';
@@ -124,23 +125,25 @@ const StatusPill = () => (
   </div>
 );
 
-// TODO: useStats() from /api/stats
-const HERO_STATS: ReadonlyArray<readonly [string, string]> = [
-  ['12,847', 'SOL pooled'],
-  ['147', 'programs deployed'],
-  ['8.24%', 'current LP APY'],
-];
+const PLACEHOLDER = '——';
 
-const HeroMetrics = () => (
-  <div className="mt-14 grid grid-cols-3 divide-x divide-line border-y border-line py-5">
-    {HERO_STATS.map(([v, l]) => (
-      <div key={l} className="px-5 first:pl-0">
-        <div className="font-mono tabular text-[28px] font-semibold tracking-tight">{v}</div>
-        <div className="font-mono text-[10px] tracking-[0.12em] text-ink-3 uppercase mt-1">{l}</div>
-      </div>
-    ))}
-  </div>
-);
+const HeroMetrics = ({ stats }: { stats: ChainStats | null }) => {
+  const rows: ReadonlyArray<readonly [string, string]> = [
+    [stats ? stats.tvlSol : PLACEHOLDER, 'SOL pooled'],
+    [stats ? stats.programsDeployed.toLocaleString() : PLACEHOLDER, 'programs deployed'],
+    [stats ? `${stats.lpApy}%` : PLACEHOLDER, 'current LP APY'],
+  ];
+  return (
+    <div className="mt-14 grid grid-cols-3 divide-x divide-line border-y border-line py-5">
+      {rows.map(([v, l]) => (
+        <div key={l} className="px-5 first:pl-0">
+          <div className="font-mono tabular text-[28px] font-semibold tracking-tight">{v}</div>
+          <div className="font-mono text-[10px] tracking-[0.12em] text-ink-3 uppercase mt-1">{l}</div>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const Terminal = () => {
   const [step, setStep] = useState(0);
@@ -188,7 +191,7 @@ const Terminal = () => {
   );
 };
 
-const Hero = () => (
+const Hero = ({ stats }: { stats: ChainStats | null }) => (
   <section className="relative pt-32 pb-20 px-6 md:px-8">
     <div className="max-w-page mx-auto grid lg:grid-cols-[1.1fr_1fr] gap-16 items-center">
       <div>
@@ -210,7 +213,7 @@ const Hero = () => (
           <BtnGhost href={DOCS_URL}>read the docs ↗</BtnGhost>
         </div>
 
-        <HeroMetrics />
+        <HeroMetrics stats={stats} />
       </div>
 
       <div className="lg:mt-0 mt-12">
@@ -336,24 +339,6 @@ const HowItWorks = () => (
 // =====================================================================
 
 type LoanState = 'active' | 'repaid' | 'recovered';
-type Loan = {
-  id: number;
-  borrower: string;
-  amount: string;
-  age: string;
-  progress: number;
-  timeLeft: string;
-  state: LoanState;
-};
-
-const STUB_FEED: Loan[] = [
-  { id: 147, borrower: '7Ax...K9p', amount: '4.20', age: '2m',  progress: 0.42, timeLeft: '17d 4h', state: 'active' },
-  { id: 146, borrower: '9Yt...fQ1', amount: '6.00', age: '14m', progress: 0.78, timeLeft: '6d 12h', state: 'active' },
-  { id: 145, borrower: '3Mn...rT8', amount: '2.10', age: '1h',  progress: 1.0,  timeLeft: '✓',      state: 'repaid' },
-  { id: 144, borrower: 'gMv...8sQ', amount: '8.50', age: '3h',  progress: 0.31, timeLeft: '40d 2h', state: 'active' },
-  { id: 143, borrower: 'kPq...Lx4', amount: '1.80', age: '6h',  progress: 1.0,  timeLeft: '⚠',      state: 'recovered' },
-  { id: 142, borrower: 'mRs...Yz9', amount: '3.40', age: '8h',  progress: 1.0,  timeLeft: '✓',      state: 'repaid' },
-];
 
 const StatePill = ({ state }: { state: LoanState }) => {
   const config = {
@@ -384,7 +369,7 @@ const StatePill = ({ state }: { state: LoanState }) => {
   );
 };
 
-const FeedRow = ({ row }: { row: Loan }) => (
+const FeedRowView = ({ row }: { row: FeedRow }) => (
   <div
     className="grid grid-cols-[60px_1fr_100px_60px_1fr_90px] gap-3 items-center
                px-4 py-3 border-t border-line first:border-t-0 hover:bg-bg-1 transition-colors"
@@ -406,13 +391,30 @@ const FeedRow = ({ row }: { row: Loan }) => (
   </div>
 );
 
-// TODO: replace STUB_FEED with a hook that:
-//   1. Initially fetches the last ~20 loans via the same logic as src/features/solignition/data-access/use-loans.ts
-//   2. Subscribes to loan account changes (RPC websocket)
-//   3. Animates new rows in at the top with a brief flash
-// For v1, stub data is fine.
-const FeedTable = () => {
-  const rows = STUB_FEED;
+const FeedSkeleton = () => (
+  <>
+    {Array.from({ length: 6 }).map((_, i) => (
+      <div
+        key={i}
+        className="grid grid-cols-[60px_1fr_100px_60px_1fr_90px] gap-3 items-center
+                   px-4 py-3 border-t border-line first:border-t-0"
+      >
+        <span className="h-3 w-10 rounded bg-bg-3 animate-pulse" />
+        <span className="h-3 w-24 rounded bg-bg-3 animate-pulse" />
+        <span className="h-3 w-16 rounded bg-bg-3 animate-pulse" />
+        <span className="h-3 w-8 rounded bg-bg-3 animate-pulse" />
+        <span className="h-3 w-full rounded bg-bg-3 animate-pulse" />
+        <span className="h-3 w-16 rounded bg-bg-3 animate-pulse" />
+      </div>
+    ))}
+  </>
+);
+
+// TODO: subscribe to loan account changes (RPC websocket) instead of polling,
+// and animate new rows in with a brief flash. v1 polls every 30s.
+const FeedTable = ({ feed, loading, error }: { feed: FeedRow[] | null; loading: boolean; error: string | null }) => {
+  const showSkeleton = loading && !feed;
+  const showEmpty = !loading && feed && feed.length === 0;
   return (
     <div className="rounded-lg border border-line bg-bg overflow-hidden">
       <div
@@ -427,14 +429,34 @@ const FeedTable = () => {
         <span>progress</span>
         <span>state</span>
       </div>
-      {rows.map((r) => (
-        <FeedRow key={r.id} row={r} />
-      ))}
+
+      {showSkeleton && <FeedSkeleton />}
+
+      {!showSkeleton && feed && feed.map((r) => <FeedRowView key={r.id} row={r} />)}
+
+      {showEmpty && (
+        <div className="px-4 py-10 text-center font-mono text-[12px] text-ink-3">
+          no loans yet —{' '}
+          <a href={APP_URL} className="text-accent hover:underline">
+            be the first →
+          </a>
+        </div>
+      )}
+
+      {error && !showSkeleton && (
+        <div
+          className="border-t border-line px-4 py-3 flex items-center justify-between
+                     font-mono text-[11px] text-warn"
+        >
+          <span>couldn&apos;t reach RPC · showing last successful read</span>
+          <span className="text-ink-3">retrying every 30s</span>
+        </div>
+      )}
     </div>
   );
 };
 
-const LiveDeployments = () => (
+const LiveDeployments = ({ feed, loading, error }: { feed: FeedRow[] | null; loading: boolean; error: string | null }) => (
   <section id="live" className="px-6 md:px-8 py-24 bg-bg-1 border-y border-line">
     <div className="max-w-page mx-auto">
       <div className="mb-10 flex items-end justify-between flex-wrap gap-4">
@@ -454,7 +476,7 @@ const LiveDeployments = () => (
         </a>
       </div>
 
-      <FeedTable />
+      <FeedTable feed={feed} loading={loading} error={error} />
     </div>
   </section>
 );
@@ -498,8 +520,7 @@ const LP_BULLETS: ReadonlyArray<readonly [string, string]> = [
   ['real backing', 'every loan secured by a deployed program'],
 ];
 
-// TODO: average loan size = sum(loan.principal) / count(loans), via use-loans hook
-const BuilderCol = () => (
+const BuilderCol = ({ stats }: { stats: ChainStats | null }) => (
   <div className="bg-bg-1 p-8 md:p-10">
     <div className="font-mono text-[11px] tracking-[0.12em] text-accent uppercase mb-4">
       FOR BUILDERS →
@@ -521,12 +542,16 @@ const BuilderCol = () => (
       ))}
     </ul>
 
-    <StatCallout label="AVG LOAN SIZE" value="3.8" unit="SOL" sub="across 147 deployments" />
+    <StatCallout
+      label="AVG LOAN SIZE"
+      value={stats ? stats.avgLoanSizeSol : PLACEHOLDER}
+      unit="SOL"
+      sub={stats ? `across ${stats.programsDeployed.toLocaleString()} deployments` : 'loading…'}
+    />
   </div>
 );
 
-// TODO: APY = computed from depositorRecord pricePerShare history (need indexer)
-const LPCol = () => (
+const LPCol = ({ stats }: { stats: ChainStats | null }) => (
   <div className="bg-bg-1 p-8 md:p-10">
     <div className="font-mono text-[11px] tracking-[0.12em] text-accent uppercase mb-4">
       FOR LPs ←
@@ -548,11 +573,16 @@ const LPCol = () => (
       ))}
     </ul>
 
-    <StatCallout label="CURRENT APY" value="8.24" unit="%" sub="7d trailing · 84 LPs" />
+    <StatCallout
+      label="CURRENT APY"
+      value={stats ? stats.lpApy : PLACEHOLDER}
+      unit="%"
+      sub={stats ? `cumulative · ${stats.lpCount ?? '——'} LPs` : 'loading…'}
+    />
   </div>
 );
 
-const Economics = () => (
+const Economics = ({ stats }: { stats: ChainStats | null }) => (
   <section id="economics" className="px-6 md:px-8 py-24">
     <div className="max-w-page mx-auto">
       <div className="mb-14 max-w-[640px]">
@@ -565,8 +595,8 @@ const Economics = () => (
       </div>
 
       <div className="grid md:grid-cols-2 gap-px bg-line border border-line rounded-lg overflow-hidden">
-        <BuilderCol />
-        <LPCol />
+        <BuilderCol stats={stats} />
+        <LPCol stats={stats} />
       </div>
     </div>
   </section>
@@ -778,17 +808,20 @@ const Footer = () => (
 // Page
 // =====================================================================
 
-const SolignitionLanding = () => (
-  <div className="min-h-screen bg-bg text-ink">
-    <Nav />
-    <Hero />
-    <HowItWorks />
-    <LiveDeployments />
-    <Economics />
-    <FAQ />
-    <CTABand />
-    <Footer />
-  </div>
-);
+const SolignitionLanding = () => {
+  const { stats, feed, loading, error } = useChainData();
+  return (
+    <div className="min-h-screen bg-bg text-ink">
+      <Nav />
+      <Hero stats={stats} />
+      <HowItWorks />
+      <LiveDeployments feed={feed} loading={loading} error={error} />
+      <Economics stats={stats} />
+      <FAQ />
+      <CTABand />
+      <Footer />
+    </div>
+  );
+};
 
 export default SolignitionLanding;
