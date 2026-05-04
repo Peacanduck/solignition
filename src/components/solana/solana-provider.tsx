@@ -4,7 +4,7 @@ import { WalletUiGillProvider } from '@wallet-ui/react-gill'
 import { solanaMobileWalletAdapter } from './solana-mobile-wallet-adapter'
 
 const config = createWalletUiConfig({
-  clusters: [createSolanaDevnet(), createSolanaLocalnet()],
+  clusters: [createSolanaDevnet(), ],//  TODO: add for local testing createSolanaLocalnet() 
 })
 
 solanaMobileWalletAdapter({ clusters: config.clusters })
