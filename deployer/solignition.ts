@@ -5,33 +5,115 @@
  * IDL can be found at `target/idl/solignition.json`.
  */
 export type Solignition = {
-  "address": "4dWBvsjopo5Z145Xmse3Lx41G1GKpMyWMLc6p4a52T4N",
+  "address": "Dz4Zey62uraTxX9V9HBXpCfuFtNzdt5ULNQ1yZXh6Peh",
   "metadata": {
     "name": "solignition",
     "version": "0.1.0",
     "spec": "0.1.0",
     "description": "Created with Anchor"
   },
-  "docs": [
-    "Solana Developer Lending Protocol",
-    "",
-    "This protocol enables SOL lending for developer program deployments with:",
-    "- Trustless upgrade authority management",
-    "- Automated loan recovery and repayment",
-    "- Fair yield distribution to depositors",
-    "- Secure fee collection and distribution",
-    "",
-    "Recovery Flow for Expired Loans:",
-    "1. Call `recover_loan` when loan expires to mark it recovered",
-    "2. Off-chain deployer can close the program account",
-    "3. Call `return_reclaimed_sol` to return recovered SOL to vault"
-  ],
   "instructions": [
     {
-      "name": "deposit",
-      "docs": [
-        "Deposit SOL into the vault"
+      "name": "claimAdmin",
+      "discriminator": [
+        148,
+        173,
+        240,
+        143,
+        219,
+        57,
+        241,
+        136
       ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "protocolConfig"
+          ]
+        },
+        {
+          "name": "adminPda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  100,
+                  109,
+                  105,
+                  110
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocolConfig",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "eventAuthority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  95,
+                  95,
+                  101,
+                  118,
+                  101,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "deposit",
       "discriminator": [
         242,
         35,
@@ -114,38 +196,6 @@ export type Solignition = {
         {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
-        },
-        {
-          "name": "eventAuthority",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  95,
-                  95,
-                  101,
-                  118,
-                  101,
-                  110,
-                  116,
-                  95,
-                  97,
-                  117,
-                  116,
-                  104,
-                  111,
-                  114,
-                  105,
-                  116,
-                  121
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "program"
         }
       ],
       "args": [
@@ -157,9 +207,6 @@ export type Solignition = {
     },
     {
       "name": "initialize",
-      "docs": [
-        "Initialize the protocol with admin and configuration"
-      ],
       "discriminator": [
         175,
         175,
@@ -327,9 +374,6 @@ export type Solignition = {
     },
     {
       "name": "recoverLoan",
-      "docs": [
-        "mark expired loan for recovery"
-      ],
       "discriminator": [
         16,
         58,
@@ -461,9 +505,6 @@ export type Solignition = {
     },
     {
       "name": "repayLoan",
-      "docs": [
-        "Repay an active loan with interest"
-      ],
       "discriminator": [
         224,
         93,
@@ -546,6 +587,24 @@ export type Solignition = {
           }
         },
         {
+          "name": "adminPda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  100,
+                  109,
+                  105,
+                  110
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         },
@@ -591,9 +650,6 @@ export type Solignition = {
     },
     {
       "name": "requestLoan",
-      "docs": [
-        "Request a loan and pay upfront admin fee"
-      ],
       "discriminator": [
         120,
         2,
@@ -753,9 +809,6 @@ export type Solignition = {
     },
     {
       "name": "returnReclaimedSol",
-      "docs": [
-        "Return reclaimed SOL from expired/recovered loans back to vault"
-      ],
       "discriminator": [
         220,
         56,
@@ -773,6 +826,7 @@ export type Solignition = {
         },
         {
           "name": "protocolConfig",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -885,9 +939,6 @@ export type Solignition = {
     },
     {
       "name": "setDeployedProgram",
-      "docs": [
-        "Set the deployed program pubkey after off-chain deployment"
-      ],
       "discriminator": [
         172,
         130,
@@ -997,9 +1048,6 @@ export type Solignition = {
     },
     {
       "name": "setPaused",
-      "docs": [
-        "Admin function to pause/unpause protocol"
-      ],
       "discriminator": [
         91,
         60,
@@ -1196,9 +1244,6 @@ export type Solignition = {
     },
     {
       "name": "updateConfig",
-      "docs": [
-        "Admin function to update configuration"
-      ],
       "discriminator": [
         29,
         158,
@@ -1299,14 +1344,17 @@ export type Solignition = {
           "type": {
             "option": "pubkey"
           }
+        },
+        {
+          "name": "admin",
+          "type": {
+            "option": "pubkey"
+          }
         }
       ]
     },
     {
       "name": "withdraw",
-      "docs": [
-        "Withdraw SOL from the vault"
-      ],
       "discriminator": [
         183,
         18,
@@ -1425,7 +1473,7 @@ export type Solignition = {
       ],
       "args": [
         {
-          "name": "amount",
+          "name": "shares",
           "type": "u64"
         }
       ]
@@ -1615,6 +1663,19 @@ export type Solignition = {
         219,
         13
       ]
+    },
+    {
+      "name": "yieldClaimed",
+      "discriminator": [
+        177,
+        201,
+        94,
+        68,
+        19,
+        200,
+        227,
+        27
+      ]
     }
   ],
   "errors": [
@@ -1707,6 +1768,16 @@ export type Solignition = {
       "code": 6017,
       "name": "invalidProgram",
       "msg": "Invalid program pubkey"
+    },
+    {
+      "code": 6018,
+      "name": "mathOverflow",
+      "msg": "Error in calculations"
+    },
+    {
+      "code": 6019,
+      "name": "noYieldToClaim",
+      "msg": "No yield to claim"
     }
   ],
   "types": [
@@ -1760,7 +1831,7 @@ export type Solignition = {
             "type": "u64"
           },
           {
-            "name": "totalDeposits",
+            "name": "totalShares",
             "type": "u64"
           }
         ]
@@ -1912,14 +1983,6 @@ export type Solignition = {
           {
             "name": "adminFeeDistributed",
             "type": "u64"
-          },
-          {
-            "name": "depositorShare",
-            "type": "u64"
-          },
-          {
-            "name": "treasuryShare",
-            "type": "u64"
           }
         ]
       }
@@ -1995,6 +2058,9 @@ export type Solignition = {
           },
           {
             "name": "repaidPendingTransfer"
+          },
+          {
+            "name": "reclaimed"
           }
         ]
       }
@@ -2029,11 +2095,11 @@ export type Solignition = {
             "type": "u16"
           },
           {
-            "name": "totalDeposits",
+            "name": "totalLoansOutstanding",
             "type": "u64"
           },
           {
-            "name": "totalLoansOutstanding",
+            "name": "totalShares",
             "type": "u64"
           },
           {
@@ -2117,7 +2183,35 @@ export type Solignition = {
             "type": "u64"
           },
           {
-            "name": "remainingBalance",
+            "name": "sharesBurned",
+            "type": "u64"
+          },
+          {
+            "name": "remainingShares",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "yieldClaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "depositor",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "sharesBurned",
+            "type": "u64"
+          },
+          {
+            "name": "remainingShares",
             "type": "u64"
           }
         ]

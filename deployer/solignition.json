@@ -1,31 +1,113 @@
 {
-  "address": "4dWBvsjopo5Z145Xmse3Lx41G1GKpMyWMLc6p4a52T4N",
+  "address": "Dz4Zey62uraTxX9V9HBXpCfuFtNzdt5ULNQ1yZXh6Peh",
   "metadata": {
     "name": "solignition",
     "version": "0.1.0",
     "spec": "0.1.0",
     "description": "Created with Anchor"
   },
-  "docs": [
-    "Solana Developer Lending Protocol",
-    "",
-    "This protocol enables SOL lending for developer program deployments with:",
-    "- Trustless upgrade authority management",
-    "- Automated loan recovery and repayment",
-    "- Fair yield distribution to depositors",
-    "- Secure fee collection and distribution",
-    "",
-    "Recovery Flow for Expired Loans:",
-    "1. Call `recover_loan` when loan expires to mark it recovered",
-    "2. Off-chain deployer can close the program account",
-    "3. Call `return_reclaimed_sol` to return recovered SOL to vault"
-  ],
   "instructions": [
     {
-      "name": "deposit",
-      "docs": [
-        "Deposit SOL into the vault"
+      "name": "claim_admin",
+      "discriminator": [
+        148,
+        173,
+        240,
+        143,
+        219,
+        57,
+        241,
+        136
       ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "protocol_config"
+          ]
+        },
+        {
+          "name": "admin_pda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  100,
+                  109,
+                  105,
+                  110
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  95,
+                  95,
+                  101,
+                  118,
+                  101,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "deposit",
       "discriminator": [
         242,
         35,
@@ -108,38 +190,6 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
-        },
-        {
-          "name": "event_authority",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  95,
-                  95,
-                  101,
-                  118,
-                  101,
-                  110,
-                  116,
-                  95,
-                  97,
-                  117,
-                  116,
-                  104,
-                  111,
-                  114,
-                  105,
-                  116,
-                  121
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "program"
         }
       ],
       "args": [
@@ -151,9 +201,6 @@
     },
     {
       "name": "initialize",
-      "docs": [
-        "Initialize the protocol with admin and configuration"
-      ],
       "discriminator": [
         175,
         175,
@@ -321,9 +368,6 @@
     },
     {
       "name": "recover_loan",
-      "docs": [
-        "mark expired loan for recovery"
-      ],
       "discriminator": [
         16,
         58,
@@ -455,9 +499,6 @@
     },
     {
       "name": "repay_loan",
-      "docs": [
-        "Repay an active loan with interest"
-      ],
       "discriminator": [
         224,
         93,
@@ -540,6 +581,24 @@
           }
         },
         {
+          "name": "admin_pda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  100,
+                  109,
+                  105,
+                  110
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         },
@@ -585,9 +644,6 @@
     },
     {
       "name": "request_loan",
-      "docs": [
-        "Request a loan and pay upfront admin fee"
-      ],
       "discriminator": [
         120,
         2,
@@ -747,9 +803,6 @@
     },
     {
       "name": "return_reclaimed_sol",
-      "docs": [
-        "Return reclaimed SOL from expired/recovered loans back to vault"
-      ],
       "discriminator": [
         220,
         56,
@@ -767,6 +820,7 @@
         },
         {
           "name": "protocol_config",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -879,9 +933,6 @@
     },
     {
       "name": "set_deployed_program",
-      "docs": [
-        "Set the deployed program pubkey after off-chain deployment"
-      ],
       "discriminator": [
         172,
         130,
@@ -991,9 +1042,6 @@
     },
     {
       "name": "set_paused",
-      "docs": [
-        "Admin function to pause/unpause protocol"
-      ],
       "discriminator": [
         91,
         60,
@@ -1190,9 +1238,6 @@
     },
     {
       "name": "update_config",
-      "docs": [
-        "Admin function to update configuration"
-      ],
       "discriminator": [
         29,
         158,
@@ -1293,14 +1338,17 @@
           "type": {
             "option": "pubkey"
           }
+        },
+        {
+          "name": "admin",
+          "type": {
+            "option": "pubkey"
+          }
         }
       ]
     },
     {
       "name": "withdraw",
-      "docs": [
-        "Withdraw SOL from the vault"
-      ],
       "discriminator": [
         183,
         18,
@@ -1419,7 +1467,7 @@
       ],
       "args": [
         {
-          "name": "amount",
+          "name": "shares",
           "type": "u64"
         }
       ]
@@ -1609,6 +1657,19 @@
         219,
         13
       ]
+    },
+    {
+      "name": "YieldClaimed",
+      "discriminator": [
+        177,
+        201,
+        94,
+        68,
+        19,
+        200,
+        227,
+        27
+      ]
     }
   ],
   "errors": [
@@ -1701,6 +1762,16 @@
       "code": 6017,
       "name": "InvalidProgram",
       "msg": "Invalid program pubkey"
+    },
+    {
+      "code": 6018,
+      "name": "MathOverflow",
+      "msg": "Error in calculations"
+    },
+    {
+      "code": 6019,
+      "name": "NoYieldToClaim",
+      "msg": "No yield to claim"
     }
   ],
   "types": [
@@ -1754,7 +1825,7 @@
             "type": "u64"
           },
           {
-            "name": "total_deposits",
+            "name": "total_shares",
             "type": "u64"
           }
         ]
@@ -1906,14 +1977,6 @@
           {
             "name": "admin_fee_distributed",
             "type": "u64"
-          },
-          {
-            "name": "depositor_share",
-            "type": "u64"
-          },
-          {
-            "name": "treasury_share",
-            "type": "u64"
           }
         ]
       }
@@ -1989,6 +2052,9 @@
           },
           {
             "name": "RepaidPendingTransfer"
+          },
+          {
+            "name": "Reclaimed"
           }
         ]
       }
@@ -2023,11 +2089,11 @@
             "type": "u16"
           },
           {
-            "name": "total_deposits",
+            "name": "total_loans_outstanding",
             "type": "u64"
           },
           {
-            "name": "total_loans_outstanding",
+            "name": "total_shares",
             "type": "u64"
           },
           {
@@ -2111,7 +2177,35 @@
             "type": "u64"
           },
           {
-            "name": "remaining_balance",
+            "name": "shares_burned",
+            "type": "u64"
+          },
+          {
+            "name": "remaining_shares",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "YieldClaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "depositor",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "shares_burned",
+            "type": "u64"
+          },
+          {
+            "name": "remaining_shares",
             "type": "u64"
           }
         ]
