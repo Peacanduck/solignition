@@ -95,7 +95,6 @@ interface DeploymentRecord {
   binaryPath?: string;
   principal: string;
   programAccountOpen: boolean;
-  cluster: string;        // 'devnet' | 'localnet' | 'mainnet-beta'
 }
 
 interface FileUploadRecord {
