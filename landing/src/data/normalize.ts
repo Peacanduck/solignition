@@ -6,7 +6,7 @@
 
 import { BN } from '@coral-xyz/anchor'
 import { PublicKey } from '@solana/web3.js'
-import type { Loan } from '@project/anchor'
+import type { NormalizedLoan } from './loan-types'
 
 export function parseState(state: unknown): number {
   if (typeof state === 'number') return state
@@ -42,10 +42,9 @@ export function publicKeyToString(pubkey: unknown): string {
   return String(pubkey ?? '')
 }
 
-export function normalizeLoanData(rawData: Record<string, unknown>): Loan {
+export function normalizeLoanData(rawData: Record<string, unknown>): NormalizedLoan {
   const repaidTsRaw = bnToBigInt(rawData.repaidTs)
   return {
-    ...rawData,
     loanId: bnToBigInt(rawData.loanId),
     borrower: publicKeyToString(rawData.borrower),
     programPubkey: publicKeyToString(rawData.programPubkey),
@@ -60,5 +59,5 @@ export function normalizeLoanData(rawData: Record<string, unknown>): Loan {
     interestPaid: bnToBigInt(rawData.interestPaid),
     reclaimedAmount: bnToBigInt(rawData.reclaimedAmount),
     reclaimedTs: bnToBigInt(rawData.reclaimedTs),
-  } as unknown as Loan
+  }
 }

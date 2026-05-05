@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react'
 import { connection, getVaultPda, getConfigPda, program } from './program'
 import { normalizeLoanData } from './normalize'
-import type { Loan } from '@project/anchor'
+import type { NormalizedLoan } from './loan-types'
 
 const POLL_INTERVAL_MS = 30_000
 const LAMPORTS_PER_SOL = 1_000_000_000n
@@ -83,7 +83,7 @@ function mapState(state: number): FeedRow['state'] | null {
   return null
 }
 
-function deriveFeed(loans: Loan[]): FeedRow[] {
+function deriveFeed(loans: NormalizedLoan[]): FeedRow[] {
   const now = Math.floor(Date.now() / 1000)
   const enriched = loans
     .map((l) => {
@@ -96,8 +96,8 @@ function deriveFeed(loans: Loan[]): FeedRow[] {
       const timeLeft = formatTimeLeft(duration - elapsed, state)
       const row: FeedRow = {
         id: Number(l.loanId),
-        borrower: shortBorrower(l.borrower as unknown as string),
-        amount: lamportsToSol(l.principal as unknown as bigint, 2),
+        borrower: shortBorrower(l.borrower),
+        amount: lamportsToSol(l.principal, 2),
         age: formatRelativeAge(elapsed),
         progress,
         timeLeft,
@@ -112,7 +112,7 @@ function deriveFeed(loans: Loan[]): FeedRow[] {
 }
 
 function deriveStats(
-  loans: Loan[],
+  loans: NormalizedLoan[],
   vaultLamports: bigint,
   totalYieldDistributed: bigint,
 ): ChainStats {
@@ -131,10 +131,7 @@ function deriveStats(
       ? '0.00'
       : ((Number(totalYieldDistributed) / Number(vaultLamports)) * 100).toFixed(2)
 
-  const principalSum = loans.reduce(
-    (acc, l) => acc + (l.principal as unknown as bigint),
-    0n,
-  )
+  const principalSum = loans.reduce((acc, l) => acc + l.principal, 0n)
   const avgLoanLamports = loans.length === 0 ? 0n : principalSum / BigInt(loans.length)
   const avgLoanSizeSol = lamportsToSol(avgLoanLamports, 2)
 
@@ -168,7 +165,7 @@ export function useChainData(): ChainData {
           (program.account as any).loan.all(),
         ])
 
-        const loans: Loan[] = (rawLoans as Array<{ account: Record<string, unknown> }>).map(
+        const loans = (rawLoans as Array<{ account: Record<string, unknown> }>).map(
           (a) => normalizeLoanData(a.account),
         )
 
