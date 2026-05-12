@@ -166,7 +166,8 @@ const logger = winston.createLogger({
         winston.format.simple()
       ),
     }),
-    new winston.transports.File({ filename: 'deployer.log' }),
+    new winston.transports.File({ filename: 'logs/deployer.log', level: 'info' }),
+    new winston.transports.File({ filename: 'error.log', level: 'error' }),
   ],
 });
 
@@ -1402,7 +1403,7 @@ public async checkPendingAuthTransfers(): Promise<void> {
     const loans = await program.account.loan.all();
     logger.info(`Found ${loans.length} total loans to check`);
     
-    const currentTimestamp = Math.floor(Date.now() / 1000); 
+    const currentTimestamp = Math.floor(Date.now() / 1000); //when testing with fast forward offset current time
     let expiredCount = 0;
     let processedCount = 0;
     
@@ -1856,6 +1857,7 @@ private async callReturnReclaimedSol(
     
     await this.stateManager.saveDeployment(deployment);
 
+    
     // Update file upload status
     fileUpload.status = 'deployed';
     await this.stateManager.saveFileUpload(fileUpload);
@@ -1911,7 +1913,7 @@ private async callReturnReclaimedSol(
       await this.stateManager.saveDeployment(deployment);
       
     } catch (error) {
-      logger.info('failed to set deployed program in contract', {loanId, borrower }, deployment.programId);
+      logger.error('failed to set deployed program in contract', {loanId, borrower }, deployment.programId);
       throw error;
     }
 
@@ -2177,9 +2179,9 @@ class ApiServer {
     const corsOptions = {
       origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
         // Allow requests with no origin (like mobile apps, curl, postman)
-       // if (!origin) {
-         // return callback(null, true);
-        //}
+        if (!origin) {
+          return callback(null, true);
+        }
         
         const allowedOrigins = [
           'http://localhost:5173',

@@ -46,3 +46,8 @@ test-ledger
 
 # landing 
 /landing/node_modules
+
+#claude
+src/.claude/
+docs/.claude/
+landing/src/.claude/
