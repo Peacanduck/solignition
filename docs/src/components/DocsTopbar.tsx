@@ -55,7 +55,7 @@ export const DocsTopbar = ({ onOpenDrawer }: Props) => {
             Reference
           </NavLink>
           <a
-            href="https://github.com/solignition/protocol/releases"
+            href="https://github.com/Peacanduck/solignition/releases"
             className="hover:text-ink transition-colors"
             target="_blank"
             rel="noreferrer"
@@ -63,7 +63,7 @@ export const DocsTopbar = ({ onOpenDrawer }: Props) => {
             Changelog
           </a>
           <a
-            href="https://github.com/solignition"
+            href="https://github.com/Peacanduck/solignition"
             className="hover:text-ink transition-colors"
             target="_blank"
             rel="noreferrer"

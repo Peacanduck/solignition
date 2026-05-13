@@ -51,7 +51,7 @@ export const DocsTOC = ({ headings }: Props) => {
           </a>
           <a
             className="text-[12px] text-ink-3 hover:text-ink no-underline"
-            href="https://github.com/solignition/protocol/issues"
+            href="https://github.com/Peacanduck/solignition/issues"
             target="_blank"
             rel="noreferrer"
           >

@@ -1,10 +1,85 @@
 ---
 title: Fees & treasury
-description: Protocol fees, treasury accumulation, and where they go.
+description: Where every lamport goes — admin fees, interest splits, treasury controls.
 ---
-
-{/* TODO: write content */}
 
 # Fees & treasury
 
-<p className="lede">Coming soon.</p>
+<p className="lede">
+  Two fee flows: a one-time admin fee at request, and interest at repay. Both are split between LPs and the treasury via the same ratio. The default split is 50/50.
+</p>
+
+<Callout kind="tldr">
+  **tl;dr —** `admin_fee_split_bps` (default `5000`) is the LP share of both the admin fee and interest. The rest goes to the admin PDA and is sweepable to the treasury via `claim_admin`.
+</Callout>
+
+## The fee accounts
+
+| PDA | Seeds | Holds |
+|---|---|---|
+| Vault | `["vault"]` | LP principal + LP's share of fees and interest. |
+| Admin PDA | `["admin"]` | Admin's accumulated share, awaiting `claim_admin`. |
+| Treasury PDA | `["treasury"]` | Destination of `claim_admin`. Pubkey rotatable via `update_config`. |
+
+## The split math
+
+On every fee event:
+
+```
+lp_share    = total × admin_fee_split_bps / 10_000
+admin_share = total - lp_share
+```
+
+With the default `admin_fee_split_bps = 5000` that's a clean 50/50.
+
+The split applies identically to:
+
+- The **admin fee** paid upfront at `request_loan`.
+- The **interest** paid at `repay_loan`.
+- The **admin fee on default** distributed at `recover_loan` (borrower forfeits, LPs are compensated).
+
+So a borrower paying `0.2 SOL` in admin fee + `0.05 SOL` in interest at the default split sends `0.125 SOL` to the vault (LPs) and `0.125 SOL` to the admin PDA.
+
+## Current defaults
+
+| Parameter | Default | Minimum |
+|---|---|---|
+| `admin_fee_split_bps` | `5000` (50%) | _no minimum_ |
+| `default_interest_rate_bps` | `500` (5%) | `500` |
+| `default_admin_fee_bps` | `500` (5%) | `500` |
+
+The defaults are advisory: borrowers can request higher rates if they want to be generous to LPs. They can't go below the minimums.
+
+All three are rotatable by the admin via `update_config`.
+
+## What LPs actually earn
+
+LP yield comes from three places:
+
+- **Interest paid by borrowers** on repay. Linear, time-prorated. See [Interest math](/protocol/interest).
+- **Admin fee share** at request and on default. Defaults to half the admin fee.
+- **Reclaimed program rent** on default. The deployer closes the program and `return_reclaimed_sol` pushes that SOL back into the vault.
+
+There is no other yield source. No external strategy, no rehypothecation, no leverage.
+
+## Treasury controls
+
+- The `treasury` pubkey is stored in `ProtocolConfig.treasury`.
+- It can be rotated by the admin: `update_config(treasury: Some(new_pubkey))`.
+- It receives SOL only via `claim_admin`, which sweeps the `admin_pda` accumulated balance into the treasury account.
+- The Treasury PDA itself (`["treasury"]`) is a separate seed-derived account; in practice `ProtocolConfig.treasury` points at the destination address (which may be a multisig or the treasury PDA).
+
+## Admin actions on fees
+
+| Action | Instruction | Effect |
+|---|---|---|
+| Sweep admin balance | `claim_admin` | Moves `admin_pda` SOL into `treasury`. |
+| Change LP/treasury split | `update_config(admin_fee_split_bps: Some(...))` | Adjusts future fee splits. Does not retroactively reshuffle past fees. |
+| Change default rates | `update_config(default_interest_rate_bps: Some(...), default_admin_fee_bps: Some(...))` | New defaults apply to subsequent `request_loan` calls. |
+| Rotate treasury | `update_config(treasury: Some(new_pubkey))` | Future `claim_admin` calls send to the new address. |
+
+<NextSteps steps={[
+  { title: 'Shares & yield', description: 'How LP yield flows into your balance', to: '/lps/shares' },
+  { title: 'How it works', description: 'Protocol architecture', to: '/protocol/mechanics' },
+  { title: 'On-chain program', description: 'Admin instructions', to: '/reference/program' },
+]} />

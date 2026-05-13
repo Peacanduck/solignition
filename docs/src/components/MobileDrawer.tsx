@@ -59,7 +59,7 @@ export const MobileDrawer = ({ open, onClose }: Props) => {
               Reference
             </Link>
             <a
-              href="https://github.com/solignition/protocol/releases"
+              href="https://github.com/Peacanduck/solignition/releases"
               target="_blank"
               rel="noreferrer"
               className="text-ink-2 hover:text-ink no-underline"
@@ -67,7 +67,7 @@ export const MobileDrawer = ({ open, onClose }: Props) => {
               Changelog
             </a>
             <a
-              href="https://github.com/solignition"
+              href="https://github.com/Peacanduck/solignition"
               target="_blank"
               rel="noreferrer"
               className="text-ink-2 hover:text-ink no-underline"

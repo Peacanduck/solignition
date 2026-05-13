@@ -1,10 +1,136 @@
 ---
 title: Borrow & deploy
-description: Upload bytecode, get a loan, auto-deploy to mainnet.
+description: End-to-end mental model of what happens when you run `solignition deploy`.
 ---
-
-{/* TODO: write content */}
 
 # Borrow & deploy
 
-<p className="lede">Coming soon.</p>
+<p className="lede">
+  One command turns a compiled `.so` into a deployed program on Solana, fronted by the protocol. You pay an admin fee upfront, the vault disburses the principal, and the deployer service publishes the program with escrowed upgrade authority.
+</p>
+
+<Callout kind="tldr">
+  **tl;dr —** Upload `.so` (≤10 MB) → pay admin fee upfront → vault disburses principal → deployer publishes program with `authority_pda` as upgrade authority → state goes `Active`. You do **not** hold upgrade authority yet.
+</Callout>
+
+## What gets uploaded
+
+Only the compiled `.so` binary. The protocol does not need source, an IDL, or metadata.
+
+- **Format:** standard Solana BPF binary (the file `anchor build` puts in `target/deploy/`).
+- **Max size:** 10 MB.
+- **Storage:** the deployer service stores the binary off-chain after `solignition upload`. You get a File ID back and can reference it on subsequent `deploy` calls.
+
+## How the principal is calculated
+
+`principal` is computed from the binary size — it's the rent for the program data account plus the transaction fees the deployer will pay to publish it.
+
+There's no min/max in the program. Two practical bounds:
+
+- **Vault liquidity.** If `principal > idle_vault_balance`, the request reverts with `InsufficientLiquidity` (error 6003).
+- **Your wallet.** The admin fee (`admin_fee_bps × principal / 10_000`) is debited from your wallet upfront. You need to have it.
+
+## Loan terms
+
+| Field | Options |
+|---|---|
+| Duration | 7 days (`604800`s) · 30 days (`2_592_000`s) · 60 days (`5_184_000`s) · 90 days (`7_776_000`s) |
+| Interest rate | Minimum `500` bps (5%). Above the minimum, you can set whatever you want — the only effect is paying more on repay. |
+| Admin fee rate | Minimum `500` bps (5%). Paid upfront, non-refundable on early repay. |
+
+The protocol's `default_interest_rate_bps` and `default_admin_fee_bps` (both `500`) are used when the CLI doesn't pass an explicit value.
+
+## On-chain flow
+
+<CodeBlock title="borrow flow" lang="ascii" rawCode={`borrower                   protocol                     deployer
+   │                          │                            │
+   │── request_loan ─────────▶│                            │
+   │   (principal, duration,  │ create Loan PDA            │
+   │    rates)                │ state: Pending             │
+   │                          │ debit admin_fee_bps        │
+   │                          │ disburse principal         │
+   │◀────── SOL + loan_id ────│                            │
+   │                          │── LoanRequested event ────▶│
+   │                          │                            │
+   │                          │                            │ publish .so to
+   │                          │                            │ BPF Loader with
+   │                          │                            │ authority_pda
+   │                          │                            │ as authority
+   │                          │                            │
+   │                          │◀── set_deployed_program ───│
+   │                          │   (admin signs)            │
+   │                          │ state: Active              │
+   │                          │── LoanDeployed event ─────▶│
+   │                          │                            │`}>
+{`borrower                   protocol                     deployer
+   │                          │                            │
+   │── request_loan ─────────▶│                            │
+   │   (principal, duration,  │ create Loan PDA            │
+   │    rates)                │ state: Pending             │
+   │                          │ debit admin_fee_bps        │
+   │                          │ disburse principal         │
+   │◀────── SOL + loan_id ────│                            │
+   │                          │── LoanRequested event ────▶│
+   │                          │                            │
+   │                          │                            │ publish .so to
+   │                          │                            │ BPF Loader with
+   │                          │                            │ authority_pda
+   │                          │                            │ as authority
+   │                          │                            │
+   │                          │◀── set_deployed_program ───│
+   │                          │   (admin signs)            │
+   │                          │ state: Active              │
+   │                          │── LoanDeployed event ─────▶│
+   │                          │                            │`}
+</CodeBlock>
+
+## Doing it with the CLI
+
+```bash
+# One-shot: upload + request loan + deploy
+solignition deploy --file target/deploy/my_program.so
+
+# Or upload first, deploy later (re-use the File ID)
+solignition upload target/deploy/my_program.so
+solignition deploy --file-id abc123def456
+
+# Custom terms (60-day loan at 5% interest, 5% admin fee)
+solignition deploy --file my_program.so \
+  --duration 5184000 \
+  --interest-rate-bps 500 \
+  --admin-fee-bps 500
+```
+
+Expected stdout:
+
+```
+$ solignition deploy --file target/deploy/my_program.so
+
+  ✓ bytecode validated · 247 KB · BPF
+  ✓ rent estimated    · 4.20 SOL
+  ✓ loan requested    · #148 · 30d · 5.0%
+  ✓ pool disbursed    · tx 5xK..pQR
+  ✓ deployed          · B4dGz..LmXq
+
+  authority: protocol (escrow) — repay to claim
+  next: solignition repay 148
+```
+
+The loan ID printed in step three is what you'll need for `solignition repay` and `solignition status`.
+
+<Callout kind="warn">
+  **No upgrades during the loan.** Upgrade authority stays in the protocol escrow (`authority_pda`) until you call `repay_loan`. You can't push a new version of the program. Deploy something you're confident in for the loan term, or be ready to repay and re-deploy.
+</Callout>
+
+## What you get back
+
+- A **loan ID** (auto-incremented; `ProtocolConfig.loan_counter` at request time).
+- A **deployed program pubkey** stored in `Loan.program_pubkey` after the deployer finishes.
+- The principal **disbursed to your wallet** (which the deployer then spends on the deploy tx).
+- A **`Loan` PDA** at seeds `["loan", loan_id, your_pubkey]` you can inspect with `solignition status <id>`.
+
+<NextSteps steps={[
+  { title: 'Upgrade authority', description: 'How the escrow + repay handoff works', to: '/builders/authority' },
+  { title: 'Repaying loans', description: 'Pay back to claim authority', to: '/builders/repay' },
+  { title: 'What if I default?', description: 'What happens at expiry without repay', to: '/builders/default' },
+]} />

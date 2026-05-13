@@ -1,10 +1,120 @@
 ---
 title: Loan lifecycle
-description: From request to disbursement to repay or default.
+description: State machine for the Loan account — six states, four actors, one happy path.
 ---
-
-{/* TODO: write content */}
 
 # Loan lifecycle
 
-<p className="lede">Coming soon.</p>
+<p className="lede">
+  Every loan is a state machine. Six states, four actors (borrower, admin, deployer, anyone), one happy path through repay and one recovery path through default.
+</p>
+
+<Callout kind="tldr">
+  **tl;dr —** `Pending → Active → RepaidPendingTransfer → Repaid` is the happy path. `Active → Recovered → Reclaimed` is the default path.
+</Callout>
+
+## State diagram
+
+<CodeBlock title="loan states" lang="ascii" rawCode={`                       borrower               admin
+                       request_loan       set_deployed_program
+                            │                     │
+                            ▼                     ▼
+                      ┌──────────┐          ┌──────────┐
+                      │ Pending  │ ──────▶  │  Active  │
+                      └──────────┘          └────┬─────┘
+                                                 │
+                       ┌─────────────────────────┴─────────────────┐
+                       │                                           │
+            borrower   │                                           │   admin/deployer
+            repay_loan ▼                                           ▼   recover_loan
+                ┌───────────────────────┐               ┌──────────────────┐
+                │ RepaidPendingTransfer │               │    Recovered     │
+                └───────────┬───────────┘               └─────────┬────────┘
+                            │                                     │
+              deployer      │                                     │  deployer
+              transfer_     ▼                                     ▼  return_reclaimed_sol
+              authority_  ┌────────┐                          ┌────────────┐
+              to_borrower │ Repaid │                          │  Reclaimed │
+                          └────────┘                          └────────────┘
+                          (terminal)                          (terminal)`}>
+{`                       borrower               admin
+                       request_loan       set_deployed_program
+                            │                     │
+                            ▼                     ▼
+                      ┌──────────┐          ┌──────────┐
+                      │ Pending  │ ──────▶  │  Active  │
+                      └──────────┘          └────┬─────┘
+                                                 │
+                       ┌─────────────────────────┴─────────────────┐
+                       │                                           │
+            borrower   │                                           │   admin/deployer
+            repay_loan ▼                                           ▼   recover_loan
+                ┌───────────────────────┐               ┌──────────────────┐
+                │ RepaidPendingTransfer │               │    Recovered     │
+                └───────────┬───────────┘               └─────────┬────────┘
+                            │                                     │
+              deployer      │                                     │  deployer
+              transfer_     ▼                                     ▼  return_reclaimed_sol
+              authority_  ┌────────┐                          ┌────────────┐
+              to_borrower │ Repaid │                          │  Reclaimed │
+                          └────────┘                          └────────────┘
+                          (terminal)                          (terminal)`}
+</CodeBlock>
+
+## States in detail
+
+### `Pending`
+
+- **Entered by:** `request_loan` (borrower).
+- **What just happened:** Principal disbursed from vault to borrower's wallet. Admin fee debited from borrower's wallet. `Loan` PDA created. `program_pubkey` is `Pubkey::default()`. `start_ts` is set.
+- **What's waiting:** The deployer service to publish the `.so` and call `set_deployed_program`.
+- **Allowed actions:** None from the borrower's side; this is an off-chain wait.
+
+### `Active`
+
+- **Entered by:** `set_deployed_program` (admin).
+- **What just happened:** Program published to BPF Upgradeable Loader. `Loan.program_pubkey` set. Upgrade authority is held by `authority_pda`.
+- **What's accruing:** Interest, linearly, up to `start_ts + duration`.
+- **Allowed actions:** `repay_loan` by the borrower (happy path) before expiry; `recover_loan` by admin/deployer after expiry.
+
+### `RepaidPendingTransfer`
+
+- **Entered by:** `repay_loan` (borrower).
+- **What just happened:** Borrower paid `principal + interest`. `repaid_ts` and `interest_paid` populated. SOL moved into the vault (plus the admin's share). Upgrade authority is still in escrow.
+- **What's waiting:** The deployer service to call `transfer_authority_to_borrower`.
+- **Allowed actions:** None from the borrower; deployer-only transition next.
+
+### `Repaid` (terminal)
+
+- **Entered by:** `transfer_authority_to_borrower` (deployer).
+- **What just happened:** CPI into BPF Upgradeable Loader moved upgrade authority to the borrower. The borrower now controls the program like any standard upgradeable Solana program.
+- **What's done:** The loan is closed. No more transitions.
+
+### `Recovered`
+
+- **Entered by:** `recover_loan` (admin + deployer co-signed).
+- **What just happened:** Loan expired without repay. The program account was closed. `recovered_ts` populated. `admin_fee_paid` is distributed via `admin_fee_split_bps` — LPs get their share of the upfront fee as compensation.
+- **What's waiting:** The deployer to return the recovered SOL to the vault.
+
+### `Reclaimed` (terminal)
+
+- **Entered by:** `return_reclaimed_sol` (deployer).
+- **What just happened:** Recovered SOL (program rent) returned to the vault. `reclaimed_amount` and `reclaimed_ts` populated. `total_yield_distributed` bumps.
+- **What's done:** The loan is closed. LPs see the recovered rent in their share price.
+
+## Events by transition
+
+| Transition | Event | Useful fields |
+|---|---|---|
+| `_` → `Pending` | `LoanRequested` | `loan_id`, `principal`, `duration`, `interest_rate_bps`, `admin_fee` |
+| `Pending` → `Active` | `LoanDeployed` | `loan_id`, `program_pubkey` |
+| `Active` → `RepaidPendingTransfer` | `LoanRepaid` | `loan_id`, `total_repaid`, `interest_paid` |
+| `RepaidPendingTransfer` → `Repaid` | `AuthorityTransferred` | `program_pubkey`, `new_authority` |
+| `Active` → `Recovered` | `LoanRecovered` | `loan_id`, `admin_fee_distributed` |
+| `Recovered` → `Reclaimed` | `SolReclaimed` | `loan_id`, `amount`, `total_reclaimed` |
+
+<NextSteps steps={[
+  { title: 'Interest math', description: 'How accrual works during Active', to: '/protocol/interest' },
+  { title: 'Fees & treasury', description: 'How admin fees and recovery flows split', to: '/protocol/fees' },
+  { title: 'On-chain program', description: 'Instructions that drive each transition', to: '/reference/program' },
+]} />

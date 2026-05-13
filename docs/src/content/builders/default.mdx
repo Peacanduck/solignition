@@ -1,10 +1,79 @@
 ---
 title: What if I default?
-description: What happens when a borrower fails to repay before expiry.
+description: There is no grace period. On expiry, the deployed program is closed and reclaimed SOL returns to the vault.
 ---
-
-{/* TODO: write content */}
 
 # What if I default?
 
-<p className="lede">Coming soon.</p>
+<p className="lede">
+  Default = miss the repay deadline. The protocol closes your deployed program and recovers the rent for LPs. There is no grace period and no second chance for that specific program.
+</p>
+
+<Callout kind="warn">
+  **No grace period.** The moment a loan crosses `start_ts + duration`, it becomes eligible for `recover_loan`. Once that runs, your program is gone.
+</Callout>
+
+## The recovery flow
+
+Two on-chain steps, both deployer-driven:
+
+1. **`recover_loan`** (admin + deployer co-signed) — state moves from `Active` to `Recovered`. The borrower's `admin_fee_paid` is distributed via `admin_fee_split_bps`: LPs get their share as compensation for the lost interest, the rest goes to the admin PDA. `recovered_ts` is set.
+2. **`return_reclaimed_sol(amount)`** (deployer) — the deployer closes the program account on Solana and pushes the reclaimed lamports back into the vault. State moves from `Recovered` to `Reclaimed`. `reclaimed_amount` and `reclaimed_ts` are set.
+
+Net effect for LPs: they recover most of the principal (program rent typically ≈ principal) plus their admin-fee share. The default is closer to a slow exit than a loss.
+
+## What you lose
+
+- **The deployed program.** The account at `program_pubkey` is closed. Anything that referenced it — other programs that CPI into it, tokens minted with it as authority, accounts owned by it — is now broken.
+- **The admin fee.** The upfront `admin_fee_paid` stays with the protocol and is distributed to LPs and treasury. You don't get it back.
+- **Any state owned by your program.** Closing the program account doesn't automatically close every account your program created; those are still there but orphaned (no program left to interact with them).
+
+## What you keep
+
+- **The principal.** It was disbursed to your wallet at `request_loan`. If you still have any of it sitting around, it's yours.
+- **No reputation hit.** The protocol does not track per-wallet defaults. There's no borrow limit, no blocklist, no cooldown.
+- **No clawback on past transactions.** Anything you did with your program during its lifetime stands.
+
+You can request another loan tomorrow with the same wallet. The protocol won't know.
+
+## Avoiding it
+
+The cheapest defense is monitoring + early repay. Both are tiny actions:
+
+```bash
+# Check time remaining + total owed
+solignition status <LOAN_ID>
+
+# List every loan you've ever opened with current state
+solignition loans
+
+# Repay (cheapest when done early — interest is pro-rated)
+solignition repay <LOAN_ID>
+```
+
+If you genuinely can't repay, you can also repay early with less than the full owed amount _in another wallet_ and forward the rest before expiry — but the cleanest fix is just to repay from the original wallet before the clock runs out.
+
+## When does the deployer actually run `recover_loan`?
+
+The protocol authorizes recovery from `start_ts + duration` onwards. In practice the deployer service polls expired loans on a regular cadence — typically within minutes of expiry, sometimes longer under heavy load. **Do not rely on a window of leniency.** Once you're past `duration`, treat the program as gone.
+
+`LoanNotExpired` (error 6009) protects against premature recovery — the deployer can't recover an `Active` loan before its time.
+
+## State after default
+
+| Loan field | Value |
+|---|---|
+| `state` | `Recovered` then `Reclaimed` |
+| `repaid_ts` | `None` |
+| `interest_paid` | `None` |
+| `recovered_ts` | Unix seconds of `recover_loan` |
+| `reclaimed_amount` | Lamports returned to vault |
+| `reclaimed_ts` | Unix seconds of `return_reclaimed_sol` |
+
+For the full state machine see [Loan lifecycle](/protocol/lifecycle).
+
+<NextSteps steps={[
+  { title: 'Repaying loans', description: 'The path away from default', to: '/builders/repay' },
+  { title: 'Loan lifecycle', description: 'The full state machine', to: '/protocol/lifecycle' },
+  { title: 'Borrow & deploy', description: 'Start fresh with a new loan', to: '/builders/borrow-flow' },
+]} />

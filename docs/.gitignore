@@ -24,6 +24,3 @@ dist-ssr
 
 # tsbuildinfo
 *.tsbuildinfo
-src/.claude/
-docs/.claude/
-landing/src/.claude/

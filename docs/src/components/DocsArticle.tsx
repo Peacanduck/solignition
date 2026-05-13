@@ -49,7 +49,7 @@ export const DocsArticle = ({ slug, headings, children }: Props) => {
 const ArticleFootRow = ({ slug }: { slug: string }) => (
   <div className="flex items-center gap-3 py-4 font-mono text-[11px] text-ink-3">
     <a
-      href={`https://github.com/solignition/protocol/edit/main/docs/src/content${slug}.mdx`}
+      href={`https://github.com/Peacanduck/solignition/edit/main/docs/src/content${slug}.mdx`}
       target="_blank"
       rel="noreferrer"
       className="hover:text-ink no-underline"

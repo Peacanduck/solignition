@@ -152,7 +152,7 @@ export const SearchModal = () => {
               <div className="mt-2">
                 <a
                   className="text-[var(--accent)] hover:underline"
-                  href="https://github.com/solignition/protocol/issues/new"
+                  href="https://github.com/Peacanduck/solignition/issues/new"
                   target="_blank"
                   rel="noreferrer"
                 >

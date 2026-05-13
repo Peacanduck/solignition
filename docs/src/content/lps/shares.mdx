@@ -1,10 +1,83 @@
 ---
 title: Shares & yield
-description: How LP shares accrue value as borrowers repay loan interest.
+description: How LP shares accrue value from borrower interest and reclaimed defaults.
 ---
-
-{/* TODO: write content */}
 
 # Shares & yield
 
-<p className="lede">Coming soon.</p>
+<p className="lede">
+  Shares are a fixed-supply claim on a growing pool. Your share count doesn't change between deposits and withdrawals; the SOL per share goes up as borrowers repay.
+</p>
+
+<Callout kind="tldr">
+  **tl;dr —** Each repay adds SOL to the vault. Your `share_amount` stays put. When you withdraw, shares redeem at the current ratio: `payout = your_shares × vault_balance / total_shares`.
+</Callout>
+
+## The model
+
+If you've used Compound's cTokens or an ERC-4626 vault, it's the same idea:
+
+- **Total shares** (`ProtocolConfig.total_shares`) only changes on `deposit` and `withdraw`.
+- **Vault balance** (the SOL held by the `["vault"]` PDA) grows on every repay, every default recovery, and every admin-fee credit.
+- **Share price** = `vault_balance / total_shares`. Climbs over time. Doesn't go down except on principal loss — and the protocol has no principal-loss mechanism (defaults are covered by the deployed program's reclaimed rent + the borrower's forfeited admin fee).
+
+No rebase. No token mint. Your `DepositorRecord.share_amount` is a `u64` that doesn't move until you redeem.
+
+## Where the yield comes from
+
+Three sources, all feeding into the vault:
+
+1. **Borrower interest at repay.** `interest = principal × interest_rate_bps / 10_000 × elapsed / duration`. The LP share is `interest × admin_fee_split_bps / 10_000`. Default split = 50%, so LPs get half.
+2. **Borrower admin fee.** Paid upfront at `request_loan`, split the same way. LPs get their share whether the loan repays cleanly or defaults.
+3. **Reclaimed program rent.** On default, the deployer closes the borrower's program and `return_reclaimed_sol` pushes that SOL back into the vault.
+
+## A worked example
+
+Suppose the vault has `100 SOL` and `1_000_000_000` total shares. You hold `100_000_000` shares (10%).
+
+A borrower repays a loan with `0.2 SOL` of interest. At the default split, `0.1 SOL` lands in the vault.
+
+- New vault balance: `100.1 SOL`.
+- Total shares: unchanged (`1_000_000_000`).
+- Your shares: unchanged (`100_000_000`).
+- Your claim: `100_000_000 × 100.1 / 1_000_000_000 = 10.01 SOL`.
+
+You earned `0.01 SOL` without doing anything.
+
+## On default
+
+When a loan expires unrepaid:
+
+- The borrower's `admin_fee_paid` (already in the protocol) is distributed via the standard split — LPs get their share.
+- The deployer closes the program. The rent (typically the bulk of the loan's principal) goes back into the vault via `return_reclaimed_sol`.
+
+So a default isn't a loss event for LPs — it's just a slower path where the borrower's program gets dismantled instead of repaid. The LP yield on a defaulted loan equals their share of the admin fee, not the full interest.
+
+## APY
+
+The protocol does **not** publish a fixed APY. Yield is variable and depends on:
+
+- **Utilization** — how much of the vault is out as active loans. Idle SOL doesn't earn anything.
+- **Borrower rates** — the minimum is 500 bps, but borrowers can request higher rates. Most won't.
+- **Loan mix** — 7-day loans turn over faster than 90-day loans, so total fees per year per SOL is higher.
+- **Default rate** — see above; defaults still yield admin-fee share + reclaimed rent.
+
+To estimate your APY in practice: track `share_amount × vault_balance / total_shares` over time. The slope is your realized yield.
+
+## Tracking your position
+
+| Where | What |
+|---|---|
+| `DepositorRecord.share_amount` | Your share balance. |
+| `DepositorRecord.deposited_amount` | Cumulative lamports you've deposited (history, not current value). |
+| `ProtocolConfig.total_shares` | Denominator for the share-to-SOL ratio. |
+| `ProtocolConfig.total_yield_distributed` | Protocol-wide cumulative yield. |
+| Vault balance | `connection.getBalance(vaultPda)` — your numerator. |
+
+For account schemas see [Account types](/reference/accounts).
+
+<NextSteps steps={[
+  { title: 'Withdrawing', description: 'Redeem shares back to SOL', to: '/lps/withdraw' },
+  { title: 'Deposit SOL', description: 'Add more to your position', to: '/lps/deposit' },
+  { title: 'Interest math', description: 'The borrower-side formula', to: '/protocol/interest' },
+]} />
