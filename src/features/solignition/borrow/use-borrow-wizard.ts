@@ -28,10 +28,10 @@ export type WizardState = {
 
 // Spec rate map; TODO: replace with protocolConfig.interestRateTiers if added on-chain
 export const DURATION_RATES: Record<7 | 30 | 60 | 90, number> = {
-  7: 400,
-  30: 500,
-  60: 550,
-  90: 600,
+  7: 500,
+  30: 600,
+  60: 750,
+  90: 800,
 }
 
 export type WizardAction =

@@ -7,6 +7,7 @@ import { toastTx } from '@/components/toast-tx'
 import { useSolana } from '@/components/solana/use-solana'
 import type { Address } from '@solana/kit'
 import { toast } from 'sonner'
+import { useFetchSigned } from '@/lib/fetch-signed'
 //import {  PublicKey } from '@solana/web3.js'
 //import { useProtocolConfig } from './use-protocol-config'
 const DEPLOYER_API_URL = import.meta.env.VITE_DEPLOYER_API_URL || 'http://localhost:3000'
@@ -26,6 +27,7 @@ export function useRepayLoanMutation({ account }: { account: UiWalletAccount }) 
   const queryClient = useQueryClient()
   const signer = useWalletUiSigner({ account })
   const signAndSend = useWalletUiSignAndSend()
+  const fetchSigned = useFetchSigned(account)
  // const protocolConfigQuery = useProtocolConfig()
   
   return useMutation({
@@ -114,16 +116,17 @@ if (protocolConfigInfo) {
             })
       
             try {
-              const notifyResponse = await fetch(`${DEPLOYER_API_URL}/notify-repaid`, {
+              const notifyBody = JSON.stringify({
+                signature,
+                borrower: account.address,
+                loanId: loanId.toString(),
+              })
+              const notifyResponse = await fetchSigned(`${DEPLOYER_API_URL}/notify-repaid`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                  signature,
-                  borrower: account.address,
-                  loanId: loanId.toString(),
-                }),
+                body: notifyBody,
               })
       
               if (!notifyResponse.ok) {

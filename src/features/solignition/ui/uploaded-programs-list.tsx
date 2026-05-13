@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { UiWalletAccount } from '@wallet-ui/react'
 //import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -15,18 +16,20 @@ import {
 //import { toast } from 'sonner'
 
 interface UploadedProgramsListProps {
+  account: UiWalletAccount
   onSelectProgram: (program: UploadedProgram) => void
   selectedFileId?: string | null
   allowDelete?: boolean
 }
 
-export function UploadedProgramsList({ 
-  onSelectProgram, 
+export function UploadedProgramsList({
+  account,
+  onSelectProgram,
   selectedFileId,
-  allowDelete = false 
+  allowDelete = false,
 }: UploadedProgramsListProps) {
-  const { data: programs, isLoading, isError } = useUploadedPrograms()
-  const deleteMutation = useDeleteUploadedProgram()
+  const { data: programs, isLoading, isError } = useUploadedPrograms({ account })
+  const deleteMutation = useDeleteUploadedProgram({ account })
   const [expandedView, setExpandedView] = useState(false)
   const [deleteFileId, setDeleteFileId] = useState<string | null>(null)
 

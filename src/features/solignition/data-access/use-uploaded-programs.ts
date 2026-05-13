@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useSolana } from '@/components/solana/use-solana'
+import type { UiWalletAccount } from '@wallet-ui/react'
 import { toast } from 'sonner'
+import { useFetchSigned } from '@/lib/fetch-signed'
 
 const DEPLOYER_API_URL = import.meta.env.VITE_DEPLOYER_API_URL || 'http://localhost:3000'
 
@@ -27,22 +28,24 @@ export interface PaginatedUploadsResponse {
 }
 
 // Hook to fetch all uploads for a borrower
-export function useUploadedPrograms(status?: 'pending' | 'ready' | 'deployed') {
-  const { account } = useSolana()
+export function useUploadedPrograms({
+  account,
+  status,
+}: {
+  account: UiWalletAccount
+  status?: 'pending' | 'ready' | 'deployed'
+}) {
+  const fetchSigned = useFetchSigned(account)
 
   return useQuery({
-    queryKey: ['uploaded-programs', account?.address, status],
+    queryKey: ['uploaded-programs', account.address, status],
     queryFn: async () => {
-      if (!account?.address) {
-        throw new Error('No account connected')
-      }
-
-      const url = status 
+      const url = status
         ? `${DEPLOYER_API_URL}/uploads/borrower/${account.address}?status=${status}`
         : `${DEPLOYER_API_URL}/uploads/borrower/${account.address}`
 
-      const response = await fetch(url)
-      
+      const response = await fetchSigned(url)
+
       if (!response.ok) {
         if (response.status === 404) {
           return []
@@ -53,10 +56,9 @@ export function useUploadedPrograms(status?: 'pending' | 'ready' | 'deployed') {
       const data: UploadedProgram[] = await response.json()
       return data
     },
-    enabled: !!account?.address,
     staleTime: 30000, // Consider data stale after 30 seconds
-    retry: (failureCount, error: any) => {
-      if (error?.message?.includes('404')) {
+    retry: (failureCount, error) => {
+      if (error instanceof Error && error.message.includes('404')) {
         return false
       }
       return failureCount < 2
@@ -65,30 +67,32 @@ export function useUploadedPrograms(status?: 'pending' | 'ready' | 'deployed') {
 }
 
 // Hook to fetch paginated uploads
-export function useUploadedProgramsPaginated(
-  limit: number = 10, 
-  offset: number = 0, 
+export function useUploadedProgramsPaginated({
+  account,
+  limit = 10,
+  offset = 0,
+  status,
+}: {
+  account: UiWalletAccount
+  limit?: number
+  offset?: number
   status?: 'pending' | 'ready' | 'deployed'
-) {
-  const { account } = useSolana()
+}) {
+  const fetchSigned = useFetchSigned(account)
 
   return useQuery({
-    queryKey: ['uploaded-programs-paginated', account?.address, limit, offset, status],
+    queryKey: ['uploaded-programs-paginated', account.address, limit, offset, status],
     queryFn: async () => {
-      if (!account?.address) {
-        throw new Error('No account connected')
-      }
-
       const params = new URLSearchParams({
         limit: limit.toString(),
         offset: offset.toString(),
-        ...(status && { status })
+        ...(status && { status }),
       })
 
-      const response = await fetch(
-        `${DEPLOYER_API_URL}/uploads/borrower/${account.address}/paginated?${params}`
+      const response = await fetchSigned(
+        `${DEPLOYER_API_URL}/uploads/borrower/${account.address}/paginated?${params}`,
       )
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch uploaded programs')
       }
@@ -96,27 +100,26 @@ export function useUploadedProgramsPaginated(
       const data: PaginatedUploadsResponse = await response.json()
       return data
     },
-    enabled: !!account?.address,
   })
 }
 
 // Hook to delete an uploaded program
-export function useDeleteUploadedProgram() {
-  const { account } = useSolana()
+export function useDeleteUploadedProgram({ account }: { account: UiWalletAccount }) {
   const queryClient = useQueryClient()
+  const fetchSigned = useFetchSigned(account)
 
   return useMutation({
     mutationFn: async (fileId: string) => {
-      if (!account?.address) {
-        throw new Error('No account connected')
-      }
-
-      const response = await fetch(`${DEPLOYER_API_URL}/uploads/${fileId}`, {
+      // The deployer authorizes the delete using `X-Auth-Pubkey` (signed by
+      // the wallet) rather than the body's `borrower`, but we keep the field
+      // for compatibility during the v1.1 transition.
+      const body = JSON.stringify({ borrower: account.address })
+      const response = await fetchSigned(`${DEPLOYER_API_URL}/uploads/${fileId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ borrower: account.address }),
+        body,
       })
 
       if (!response.ok) {
@@ -140,19 +143,24 @@ export function useDeleteUploadedProgram() {
   })
 }
 
-// Hook to upload a program file
-export function useUploadProgramFile() {
+// Hook to upload a program file (alternate entry point — also exposed via
+// use-upload-program-file.ts for callers that don't need query invalidation).
+export function useUploadProgramFile({ account }: { account: UiWalletAccount }) {
   const queryClient = useQueryClient()
+  const fetchSigned = useFetchSigned(account)
 
   return useMutation({
     mutationFn: async ({ file, borrower }: { file: File; borrower: string }) => {
+      const fileBytes = new Uint8Array(await file.arrayBuffer())
+
       const formData = new FormData()
       formData.append('file', file)
       formData.append('borrower', borrower)
 
-      const response = await fetch(`${DEPLOYER_API_URL}/upload`, {
+      const response = await fetchSigned(`${DEPLOYER_API_URL}/upload`, {
         method: 'POST',
         body: formData,
+        fileBytes,
       })
 
       if (!response.ok) {
@@ -165,7 +173,7 @@ export function useUploadProgramFile() {
     },
     onSuccess: (data) => {
       // Invalidate uploads list to include the new upload
-      console.log('Upload successful', data);
+      console.log('Upload successful', data)
       queryClient.invalidateQueries({ queryKey: ['uploaded-programs'] })
       queryClient.invalidateQueries({ queryKey: ['uploaded-programs-paginated'] })
     },

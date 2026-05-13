@@ -30,7 +30,7 @@ export function RequestLoanPanel({ account }: { account: UiWalletAccount }) {
 
   const configQuery = useProtocolConfig()
   const requestLoanMutation = useRequestLoanMutation({ account })
-  const uploadMutation = useUploadProgramFile()
+  const uploadMutation = useUploadProgramFile({ account })
 
   // Upload the file and get estimated cost
   const handleFileUpload = async (selectedFile: File) => {
@@ -372,7 +372,8 @@ export function RequestLoanPanel({ account }: { account: UiWalletAccount }) {
             </TabsContent>
 
             <TabsContent value="existing" className="space-y-2">
-              <UploadedProgramsList 
+              <UploadedProgramsList
+                account={account}
                 onSelectProgram={handleSelectProgram}
                 selectedFileId={selectedProgram?.fileId}
               />

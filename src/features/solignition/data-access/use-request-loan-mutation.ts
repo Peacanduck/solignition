@@ -9,6 +9,7 @@ import { useSolana } from '@/components/solana/use-solana'
 import { useProtocolConfig } from './use-protocol-config'
 import { toast } from 'sonner'
 import {  PublicKey } from "@solana/web3.js";
+import { useFetchSigned } from '@/lib/fetch-signed'
 
 const DEPLOYER_API_URL = import.meta.env.VITE_DEPLOYER_API_URL || 'http://localhost:3000'
 
@@ -44,6 +45,7 @@ export function useRequestLoanMutation({ account }: { account: UiWalletAccount }
   const signer = useWalletUiSigner({ account })
   const signAndSend = useWalletUiSignAndSend()
   const protocolConfigQuery = useProtocolConfig()
+  const fetchSigned = useFetchSigned(account)
 
   return useMutation({
     mutationFn: async (params: RequestLoanParams) => {
@@ -101,17 +103,19 @@ export function useRequestLoanMutation({ account }: { account: UiWalletAccount }
       })
 
       try {
-        const notifyResponse = await fetch(`${DEPLOYER_API_URL}/notify-loan`, {
+        // Serialize once so we can sign over the exact bytes that go on the wire.
+        const notifyBody = JSON.stringify({
+          signature,
+          borrower: account.address,
+          loanId: loanId.toString(),
+          fileId,
+        })
+        const notifyResponse = await fetchSigned(`${DEPLOYER_API_URL}/notify-loan`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            signature,
-            borrower: account.address,
-            loanId: loanId.toString(),
-            fileId, // Pass the file ID directly
-          }),
+          body: notifyBody,
         })
 
         if (!notifyResponse.ok) {

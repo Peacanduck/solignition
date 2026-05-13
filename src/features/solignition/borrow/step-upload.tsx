@@ -17,7 +17,7 @@ export function StepUpload({
   dispatch: React.Dispatch<WizardAction>
   account: UiWalletAccount
 }) {
-  const upload = useUploadProgramFile()
+  const upload = useUploadProgramFile({ account })
   const inputRef = useRef<HTMLInputElement>(null)
   const [drag, setDrag] = useState(false)
 
