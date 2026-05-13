@@ -31,6 +31,8 @@ module.exports = {
       FRONTEND_URL:"https://app.solignition.xyz",
       API_KEY_HEADER:"X-API-Key",
       CORS_ORIGINS:"https://app.solignition.xyz",
+      REQUIRE_AUTH:"enforce",
+      MAX_UPLOAD_BYTES:"10485760"
     }
   }]
 }

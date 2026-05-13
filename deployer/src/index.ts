@@ -25,8 +25,14 @@ import { GraphQLClient, gql } from 'graphql-request';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import { v4 as uuidv4 } from 'uuid';
+import { LRUCache } from 'lru-cache';
 import { Solignition } from '../../anchor/target/types/solignition';
 import { error, log } from 'console';
+import { captureRawBody, parseAuthMode, requireAuth, type AuthMode } from './auth';
+import { loadKeypair } from './keypairLoader';
 
 const execAsync = promisify(exec);
 
@@ -39,7 +45,9 @@ interface DeployerConfig {
   wsUrl?: string;
   programId: PublicKey;
   deployerKeypairPath: string;
+  deployerKeypairPassphrase?: string;
   adminKeypairPath?: string;
+  adminKeypairPassphrase?: string;
   binaryStoragePath: string;
   uploadPath: string;
   dbPath: string;
@@ -51,6 +59,12 @@ interface DeployerConfig {
   cluster: 'devnet' | 'testnet' | 'mainnet-beta' | 'localnet';
   graphqlEndpoint: string;
   solanaCliPath?: string;
+  /** Maximum bytes accepted by `POST /upload`. Default 4 MB. */
+  maxUploadBytes: number;
+  /** Wallet-signature auth enforcement mode: `enforce` | `warn` | `off`. */
+  authMode: AuthMode;
+  /** Frontend origins explicitly allowed by CORS, in addition to defaults. */
+  extraFrontendOrigins: string[];
 }
 
 const config: DeployerConfig = {
@@ -70,6 +84,14 @@ const config: DeployerConfig = {
   cluster: (process.env.CLUSTER as any) || 'localnet',
   graphqlEndpoint: process.env.GRAPHQL_ENDPOINT || 'http://127.0.0.1:18488/subgraphs',
   solanaCliPath: process.env.SOLANA_CLI_PATH || 'solana',
+  maxUploadBytes: parseInt(process.env.MAX_UPLOAD_BYTES || '4194304'),
+  authMode: parseAuthMode(process.env.REQUIRE_AUTH),
+  deployerKeypairPassphrase: process.env.DEPLOYER_KEYPAIR_PASSPHRASE,
+  adminKeypairPassphrase: process.env.ADMIN_KEYPAIR_PASSPHRASE,
+  extraFrontendOrigins: (process.env.EXTRA_FRONTEND_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
 };
 
 // ============ Constants ============
@@ -77,6 +99,126 @@ const VAULT_SEED = Buffer.from('vault');
 const AUTHORITY_SEED = Buffer.from('authority');
 const PROTOCOL_CONFIG_SEED = Buffer.from('config');
 const LOAN_SEED = Buffer.from('loan');
+
+// Anchor instruction discriminators (first 8 bytes of `sha256("global:<ix>")`).
+// Used to validate that `/notify-*` callbacks reference the right instruction.
+// Source of truth: anchor IDL `instructions[].discriminator`.
+const REQUEST_LOAN_DISCRIMINATOR = Buffer.from([120, 2, 7, 7, 1, 219, 235, 187]);
+const REPAY_LOAN_DISCRIMINATOR = Buffer.from([224, 93, 144, 77, 61, 17, 137, 54]);
+
+// Cache transactions we've already verified so spammed retries are O(1) and
+// don't re-charge us a getTransaction RPC.
+const verifiedSignatureCache = new LRUCache<string, boolean>({
+  max: 5000,
+  ttl: 10 * 60 * 1000,
+});
+
+// ============ Rate limiters ============
+// Two layers run concurrently on authed routes — request is blocked if either
+// trips. Per-IP is the DoS defence; per-pubkey is the abuse defence.
+
+const ipKey = (req: express.Request) => req.ip || 'unknown';
+const pubkeyKey = (req: express.Request) => req.authPubkey || `ip:${req.ip || 'unknown'}`;
+
+const rateLimitMessage = (code: string, label: string) => ({
+  error: `Rate limit exceeded (${label})`,
+  code,
+});
+
+const uploadIpLimit = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1h
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: ipKey,
+  message: rateLimitMessage('rate_limit_ip', '/upload per IP'),
+});
+const uploadPubkeyLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: pubkeyKey,
+  message: rateLimitMessage('rate_limit_pubkey', '/upload per pubkey (hour)'),
+});
+const uploadPubkeyDailyLimit = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 50,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: pubkeyKey,
+  message: rateLimitMessage('rate_limit_pubkey_daily', '/upload per pubkey (day)'),
+});
+
+const notifyIpLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: ipKey,
+  message: rateLimitMessage('rate_limit_ip', '/notify-* per IP'),
+});
+const notifyPubkeyLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: pubkeyKey,
+  message: rateLimitMessage('rate_limit_pubkey', '/notify-* per pubkey'),
+});
+
+const getIpLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: ipKey,
+  message: rateLimitMessage('rate_limit_ip', 'GET per IP'),
+});
+const getPubkeyLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: pubkeyKey,
+  message: rateLimitMessage('rate_limit_pubkey', 'GET per pubkey'),
+});
+
+/** Factory: build the requireAuth middleware wired with logger + metrics. */
+function authMw() {
+  return requireAuth(config.authMode, logger, (code) =>
+    metrics.authFailures.inc({ code }),
+  );
+}
+
+// ============ Cached keypair loaders ============
+let deployerKeypairCache: Keypair | null = null;
+let adminKeypairCache: Keypair | null = null;
+
+async function getDeployerKeypair(): Promise<Keypair> {
+  if (deployerKeypairCache) return deployerKeypairCache;
+  deployerKeypairCache = await loadKeypair({
+    filePath: config.deployerKeypairPath,
+    passphrase: config.deployerKeypairPassphrase,
+    logger,
+    label: 'deployer',
+  });
+  return deployerKeypairCache;
+}
+
+async function getAdminKeypair(): Promise<Keypair> {
+  if (adminKeypairCache) return adminKeypairCache;
+  if (!config.adminKeypairPath) {
+    throw new Error('ADMIN_KEYPAIR_PATH is not configured.');
+  }
+  adminKeypairCache = await loadKeypair({
+    filePath: config.adminKeypairPath,
+    passphrase: config.adminKeypairPassphrase,
+    logger,
+    label: 'admin',
+  });
+  return adminKeypairCache;
+}
 
 // ============ Types ============
 interface DeploymentRecord {
@@ -209,6 +351,18 @@ const metrics = {
 expiredLoansChecked: new Counter({
   name: 'deployer_expired_loans_checked_total',
   help: 'Total number of expired loan checks performed',
+  registers: [registry],
+}),
+validationRejected: new Counter({
+  name: 'deployer_validation_rejected_total',
+  help: 'Requests rejected by /upload validation (ELF, size, dedup, filename, etc.)',
+  labelNames: ['reason'],
+  registers: [registry],
+}),
+authFailures: new Counter({
+  name: 'deployer_http_auth_failures_total',
+  help: 'Auth failures (wallet-signature verification)',
+  labelNames: ['code'],
   registers: [registry],
 }),
 };
@@ -1062,10 +1216,7 @@ public async checkPendingLoansForDeployment(): Promise<void> {
   try {
     logger.info('Checking for pending loans needing deployed program set...');
     
-    const deployerKeypairData = await fs.readFile(config.deployerKeypairPath, 'utf8');
-    const deployerKeypair = Keypair.fromSecretKey(
-      new Uint8Array(JSON.parse(deployerKeypairData))
-    );
+    const deployerKeypair = await getDeployerKeypair();
     
     const idlContent = await fs.readFile(config.idlPath, 'utf8');
     const idl = JSON.parse(idlContent) as Idl;
@@ -1254,10 +1405,7 @@ public async checkPendingAuthTransfers(): Promise<void> {
   try {
     logger.info('Checking for loans pending auth transfer...');
     
-    const deployerKeypairData = await fs.readFile(config.deployerKeypairPath, 'utf8');
-    const deployerKeypair = Keypair.fromSecretKey(
-      new Uint8Array(JSON.parse(deployerKeypairData))
-    );
+    const deployerKeypair = await getDeployerKeypair();
     
     const idlContent = await fs.readFile(config.idlPath, 'utf8');
     const idl = JSON.parse(idlContent) as Idl;
@@ -1381,10 +1529,7 @@ public async checkPendingAuthTransfers(): Promise<void> {
   try {
     logger.info('Checking for expired loans...');
     
-    const deployerKeypairData = await fs.readFile(config.deployerKeypairPath, 'utf8');
-    const deployerKeypair = Keypair.fromSecretKey(
-      new Uint8Array(JSON.parse(deployerKeypairData))
-    );
+    const deployerKeypair = await getDeployerKeypair();
     // Initialize Anchor program
     const idlContent = await fs.readFile(config.idlPath, 'utf8');
     const idl = JSON.parse(idlContent) as Idl;
@@ -1590,10 +1735,7 @@ private async callRecoverLoan(
         this.program.programId
       );
 
-    const deployerKeypairData = await fs.readFile(config.deployerKeypairPath, 'utf8');
-    const deployerKeypair = Keypair.fromSecretKey(
-      new Uint8Array(JSON.parse(deployerKeypairData))
-    );
+    const deployerKeypair = await getDeployerKeypair();
     // Initialize Anchor program
     const idlContent = await fs.readFile(config.idlPath, 'utf8');
     const idl = JSON.parse(idlContent) as Idl;
@@ -1964,8 +2106,7 @@ private async callReturnReclaimedSol(
         commitment: 'confirmed',
       };
 
-      const deployerKeypairData = await fs.readFile(config.deployerKeypairPath, 'utf8');
-      const deployerKeypair = Keypair.fromSecretKey(new Uint8Array(JSON.parse(deployerKeypairData)));
+      const deployerKeypair = await getDeployerKeypair();
   
       const deployerWallet = new Wallet(deployerKeypair);
       const provider = new AnchorProvider(this.connection, deployerWallet, opts);
@@ -2151,13 +2292,17 @@ class ApiServer {
     this.stateManager = stateManager;
     this.binaryManager = binaryManager;
     
-    // Configure multer for file uploads
+    // Configure multer with in-memory storage so the auth middleware can hash
+    // file.buffer before we commit anything to disk. Cap at `maxUploadBytes`
+    // (4 MB default) to bound memory usage and DoS risk.
     this.upload = multer({
-      dest: config.uploadPath,
+      storage: multer.memoryStorage(),
       limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB limit
+        fileSize: config.maxUploadBytes,
+        files: 1,
+        fields: 5,
       },
-      fileFilter: (req, file, cb) => {
+      fileFilter: (_req, file, cb) => {
         if (path.extname(file.originalname) !== '.so') {
           return cb(new Error('Only .so files are allowed'));
         }
@@ -2175,46 +2320,86 @@ class ApiServer {
   }
 
   private setupMiddleware(): void {
-    // Configure CORS - this must be FIRST
-    const corsOptions = {
-      origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
-        // Allow requests with no origin (like mobile apps, curl, postman)
-        if (!origin) {
-          return callback(null, true);
-        }
-        
-        const allowedOrigins = [
+    // Trust the first proxy hop (ngrok / Azure front door) so `req.ip` reads
+    // X-Forwarded-For correctly for per-IP rate limiting and logging.
+    this.app.set('trust proxy', 1);
+
+    // Hardening headers. Default-src 'none' is correct for a JSON API — no
+    // pages are served, no inline scripts to permit.
+    this.app.use(helmet({
+      contentSecurityPolicy: {
+        directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
+      },
+      crossOriginResourcePolicy: { policy: 'same-site' },
+    }));
+
+    // Per-request UUID, exposed via header so clients can quote it in support tickets.
+    this.app.use((req, res, next) => {
+      const id = (req.header('X-Request-Id') || uuidv4()).slice(0, 64);
+      req.id = id;
+      res.setHeader('X-Request-Id', id);
+      next();
+    });
+
+    // CORS allowlist. The `!origin → allow` bypass is intentional: CLI, curl,
+    // and server-to-server callers don't send Origin and shouldn't be blocked
+    // by a browser-only mechanism. Auth, rate-limit, and validation still
+    // apply to them.
+    const isDev = (process.env.NODE_ENV || 'development') === 'development';
+    const baseAllowed = [
+      'https://app.solignition.xyz',
+      'https://www.solignition.xyz',
+    ];
+    const devAllowed = isDev
+      ? [
           'http://localhost:5173',
           'http://localhost:5174',
           'http://localhost:3000',
           'http://127.0.0.1:5173',
-          'https://api.solignition.ngrok.app',
-          process.env.FRONTEND_URL,
-        ].filter(Boolean) as string[];
-        
-        if (allowedOrigins.indexOf(origin) !== -1) {
-          callback(null, true);
-        }/**  else {
-          logger.warn(`CORS request from unauthorized origin: ${origin}`);
-          callback(null, true); // Allow anyway for development
-        }*/
+        ]
+      : [];
+    const allowedOrigins = new Set<string>([
+      ...baseAllowed,
+      ...devAllowed,
+      ...config.extraFrontendOrigins,
+    ]);
+
+    const corsOptions: cors.CorsOptions = {
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true); // non-browser caller
+        if (allowedOrigins.has(origin)) return callback(null, true);
+        logger.warn('cors.reject', { origin });
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-      exposedHeaders: ['Content-Length', 'Content-Type'],
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'Accept',
+        'X-Auth-Pubkey',
+        'X-Auth-Timestamp',
+        'X-Auth-Nonce',
+        'X-Auth-Signature',
+        'X-Request-Id',
+      ],
+      exposedHeaders: ['Content-Length', 'Content-Type', 'X-Request-Id'],
       maxAge: 86400,
     };
-    
+
     this.app.use(cors(corsOptions));
-    
-    // Handle preflight requests
     this.app.options('*', cors(corsOptions));
-    
-    this.app.use(express.json());
-    
-    logger.info('CORS middleware configured');
-    
+
+    // Capture raw JSON body bytes BEFORE parsing — the auth middleware needs
+    // those exact bytes for body_hash, and `express.json()` would consume them.
+    // The capture also re-parses JSON into `req.body` for handlers.
+    this.app.use(captureRawBody(2 * 1024 * 1024)); // 2 MB cap on JSON bodies
+
+    logger.info('Middleware configured', {
+      authMode: config.authMode,
+      allowedOrigins: Array.from(allowedOrigins),
+      isDev,
+    });
   }
   
   private setupRoutes(): void {
@@ -2266,21 +2451,39 @@ class ApiServer {
   }
     });
 
-    this.app.post('/notify-repaid', async (req, res) => {
+    this.app.post(
+      '/notify-repaid',
+      notifyIpLimit,
+      authMw(),
+      notifyPubkeyLimit,
+      async (req, res) => {
       try {
         const { signature, borrower, loanId } = req.body;
-        
+
         if (!loanId || !borrower) {
           logger.warn('Notify loan request missing required fields', { signature, borrower });
-          return res.status(400).json({ 
-            error: 'Transaction signature and borrower address required' 
+          return res.status(400).json({
+            error: 'Transaction signature and borrower address required'
           });
         }
 
-        logger.info('Received repaid notification', { 
-          signature, 
-          borrower, 
-          loanId: loanId || 'unknown'
+        if (config.authMode !== 'off' && req.authPubkey && req.authPubkey !== borrower) {
+          logger.warn('notify-repaid.authz_mismatch', {
+            authPubkey: req.authPubkey,
+            borrower,
+            reqId: req.id,
+          });
+          return res.status(403).json({
+            error: 'Authenticated pubkey does not match `borrower` field',
+            code: 'authz_mismatch',
+          });
+        }
+
+        logger.info('Received repaid notification', {
+          signature,
+          borrower,
+          loanId: loanId || 'unknown',
+          reqId: req.id,
         });
 
         let tx;
@@ -2330,21 +2533,40 @@ class ApiServer {
     });
 
     // Notify about new loan request - called by frontend after transaction
-    this.app.post('/notify-loan', async (req, res) => {
+    this.app.post(
+      '/notify-loan',
+      notifyIpLimit,
+      authMw(),
+      notifyPubkeyLimit,
+      async (req, res) => {
       try {
         const { signature, borrower, loanId, fileId } = req.body;
-        
+
         if (!signature || !borrower) {
           logger.warn('Notify loan request missing required fields', { signature, borrower });
-          return res.status(400).json({ 
-            error: 'Transaction signature and borrower address required' 
+          return res.status(400).json({
+            error: 'Transaction signature and borrower address required'
           });
         }
 
-        logger.info('Received loan notification', { 
-          signature, 
-          borrower, 
-          loanId: loanId || 'unknown'
+        // Authz: signing wallet must match the body's `borrower`.
+        if (config.authMode !== 'off' && req.authPubkey && req.authPubkey !== borrower) {
+          logger.warn('notify-loan.authz_mismatch', {
+            authPubkey: req.authPubkey,
+            borrower,
+            reqId: req.id,
+          });
+          return res.status(403).json({
+            error: 'Authenticated pubkey does not match `borrower` field',
+            code: 'authz_mismatch',
+          });
+        }
+
+        logger.info('Received loan notification', {
+          signature,
+          borrower,
+          loanId: loanId || 'unknown',
+          reqId: req.id,
         });
 
         // Check if we have a file upload for this borrower
@@ -2400,91 +2622,162 @@ class ApiServer {
       }
     });
 
-    // Upload .so file and calculate deployment cost
-    this.app.post('/upload', this.upload.single('file'), async (req, res) => {
-      try {
-        if (!req.file) {
-          return res.status(400).json({ error: 'No file uploaded' });
-        }
+    // Upload .so file and calculate deployment cost.
+    //
+    // Middleware order:
+    //   1. uploadIpLimit  — cheap DoS gate before we parse anything.
+    //   2. multer (memoryStorage) — populates req.file.buffer for auth/validation.
+    //   3. requireAuth    — hashes req.file.buffer as BODY_HASH and verifies sig.
+    //   4. upload*PubkeyLimit — abuse gate, only meaningful with req.authPubkey set.
+    this.app.post(
+      '/upload',
+      uploadIpLimit,
+      this.upload.single('file'),
+      authMw(),
+      uploadPubkeyLimit,
+      uploadPubkeyDailyLimit,
+      async (req, res) => {
+        let tmpPath: string | null = null;
+        try {
+          if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+          }
 
-        const { borrower } = req.body;
-        if (!borrower) {
-          return res.status(400).json({ error: 'Borrower address required' });
-        }
+          const { borrower } = req.body as { borrower?: string };
+          if (!borrower) {
+            return res.status(400).json({ error: 'Borrower address required' });
+          }
 
-        logger.info('File uploaded', {
-          fileName: req.file.originalname,
-          size: req.file.size,
-          borrower,
-        });
+          // Authz: the wallet that signed must equal the borrower field.
+          // Skipped in `off` mode (no authPubkey set).
+          if (config.authMode !== 'off' && req.authPubkey && req.authPubkey !== borrower) {
+            logger.warn('upload.authz_mismatch', {
+              authPubkey: req.authPubkey,
+              borrower,
+              reqId: req.id,
+            });
+            return res.status(403).json({
+              error: 'Authenticated pubkey does not match `borrower` field',
+              code: 'authz_mismatch',
+            });
+          }
 
-        // Validate the binary
-        const binaryData = await fs.readFile(req.file.path);
-        const validation = await this.binaryManager.validateBinary(binaryData);
-        
-        if (!validation.valid) {
-          await fs.unlink(req.file.path);
-          return res.status(400).json({ 
-            error: `Invalid binary: ${validation.reason}` 
+          // Validate filename — strip any path components and reject NUL.
+          const safeFileName = path.basename(req.file.originalname || 'program.so');
+          if (safeFileName.includes('\0') || safeFileName.includes('..')) {
+            metrics.validationRejected?.inc({ reason: 'bad_filename' });
+            return res.status(400).json({ error: 'Invalid filename', code: 'bad_filename' });
+          }
+
+          const buffer = req.file.buffer;
+
+          // ELF magic check BEFORE persisting anything.
+          if (buffer.length < 4 || buffer[0] !== 0x7f || buffer[1] !== 0x45 || buffer[2] !== 0x4c || buffer[3] !== 0x46) {
+            metrics.validationRejected?.inc({ reason: 'not_elf' });
+            return res.status(400).json({ error: 'File is not a valid ELF binary', code: 'not_elf' });
+          }
+
+          // Size cap (multer already enforces, but double-check explicitly).
+          if (buffer.length > config.maxUploadBytes) {
+            metrics.validationRejected?.inc({ reason: 'too_large' });
+            return res.status(413).json({
+              error: `File exceeds ${config.maxUploadBytes} byte limit`,
+              code: 'too_large',
+            });
+          }
+
+          // Dedup: same borrower uploading bit-identical bytes returns the
+          // existing fileId rather than creating a duplicate record.
+          const hash = createHash('sha256').update(buffer).digest('hex');
+          const existing = await this.stateManager.getAllFileUploadsByBorrower(borrower);
+          const dupe = existing.find((u) => u.binaryHash === hash && u.status !== 'deployed');
+          if (dupe) {
+            logger.info('upload.dedup', { borrower, fileId: dupe.fileId, reqId: req.id });
+            return res.json({
+              success: true,
+              fileId: dupe.fileId,
+              estimatedCost: dupe.estimatedCost,
+              binaryHash: dupe.binaryHash,
+              message: 'Matching upload already exists for this wallet.',
+            });
+          }
+
+          logger.info('upload.accepted', {
+            fileName: safeFileName,
+            size: buffer.length,
+            borrower,
+            reqId: req.id,
           });
+
+          // Write buffer to a temp file so binaryManager.storeBinary can copy it.
+          // (Refactoring storeBinary to accept a Buffer is out of scope here.)
+          await fs.mkdir(config.uploadPath, { recursive: true });
+          tmpPath = path.join(config.uploadPath, `${uuidv4()}.so`);
+          await fs.writeFile(tmpPath, buffer);
+
+          const fileId = createHash('sha256')
+            .update(borrower + Date.now())
+            .digest('hex')
+            .substring(0, 16);
+
+          const { hash: storedHash, destinationPath } = await this.binaryManager.storeBinary(
+            fileId,
+            tmpPath,
+          );
+
+          const estimatedCost = await this.binaryManager.estimateDeploymentCost(destinationPath);
+
+          const fileUpload: FileUploadRecord = {
+            fileId,
+            borrower,
+            fileName: safeFileName,
+            filePath: destinationPath,
+            fileSize: buffer.length,
+            binaryHash: storedHash,
+            estimatedCost,
+            status: 'ready',
+            createdAt: Date.now(),
+          };
+
+          await this.stateManager.saveFileUpload(fileUpload);
+
+          metrics.fileUploads.inc();
+
+          res.json({
+            success: true,
+            fileId,
+            estimatedCost,
+            binaryHash: storedHash,
+            message: 'File uploaded successfully. You can now request a loan for deployment.',
+          });
+        } catch (error) {
+          logger.error('upload.error', {
+            errorMessage: error instanceof Error ? error.message : String(error),
+            reqId: req.id,
+          });
+          res.status(500).json({ error: String(error) });
+        } finally {
+          if (tmpPath) {
+            await fs.unlink(tmpPath).catch(() => {});
+          }
         }
+      },
+    );
 
-        // Generate file ID and store binary
-        const fileId = createHash('sha256')
-          .update(borrower + Date.now())
-          .digest('hex')
-          .substring(0, 16);
-
-        const { hash, destinationPath } = await this.binaryManager.storeBinary(
-          fileId, 
-          req.file.path
-        );
-
-        // Estimate deployment cost
-        const estimatedCost = await  this.binaryManager.estimateDeploymentCost(destinationPath);
-
-        // Save file upload record
-        const fileUpload: FileUploadRecord = {
-          fileId,
-          borrower,
-          fileName: req.file.originalname,
-          filePath: destinationPath,
-          fileSize: req.file.size,
-          binaryHash: hash,
-          estimatedCost,
-          status: 'ready',
-          createdAt: Date.now(),
-        };
-
-        await this.stateManager.saveFileUpload(fileUpload);
-
-        // Clean up temp file
-        await fs.unlink(req.file.path);
-
-        metrics.fileUploads.inc();
-
-        res.json({
-          success: true,
-          fileId,
-          estimatedCost,
-          binaryHash: hash,
-          message: 'File uploaded successfully. You can now request a loan for deployment.',
-        });
-      } catch (error) {
-        logger.error('Error handling file upload', { error });
-        if (req.file) {
-          await fs.unlink(req.file.path).catch(() => {});
-        }
-        res.status(500).json({ error: String(error) });
-      }
-    });
-
-    // Get deployment status
-    this.app.get('/deployments/:loanId', async (req, res) => {
+    // Get deployment status — must be the borrower on the record.
+    this.app.get(
+      '/deployments/:loanId',
+      getIpLimit,
+      authMw(),
+      getPubkeyLimit,
+      async (req, res) => {
       try {
         const deployment = await this.stateManager.getDeployment(req.params.loanId);
         if (!deployment) {
           return res.status(404).json({ error: 'Deployment not found' });
+        }
+        if (config.authMode !== 'off' && req.authPubkey && deployment.borrower !== req.authPubkey) {
+          return res.status(403).json({ error: 'Not authorized to view this deployment', code: 'authz_mismatch' });
         }
         res.json(deployment);
       } catch (error) {
@@ -2492,9 +2785,17 @@ class ApiServer {
       }
     });
 
-    // Get all deployments for a borrower
-    this.app.get('/deployments/borrower/:borrower', async (req, res) => {
+    // Get all deployments for a borrower — `:borrower` must match the signer.
+    this.app.get(
+      '/deployments/borrower/:borrower',
+      getIpLimit,
+      authMw(),
+      getPubkeyLimit,
+      async (req, res) => {
       try {
+        if (config.authMode !== 'off' && req.authPubkey && req.params.borrower !== req.authPubkey) {
+          return res.status(403).json({ error: 'Borrower in path does not match authenticated pubkey', code: 'authz_mismatch' });
+        }
         const allDeployments = await this.stateManager.getAllDeployments();
         const borrowerDeployments = allDeployments.filter(
           d => d.borrower === req.params.borrower
@@ -2505,12 +2806,20 @@ class ApiServer {
       }
     });
 
-    // Get file upload status
-    this.app.get('/uploads/:fileId', async (req, res) => {
+    // Get file upload status — must be the borrower on the upload record.
+    this.app.get(
+      '/uploads/:fileId',
+      getIpLimit,
+      authMw(),
+      getPubkeyLimit,
+      async (req, res) => {
       try {
         const upload = await this.stateManager.getFileUpload(req.params.fileId);
         if (!upload) {
           return res.status(404).json({ error: 'Upload not found' });
+        }
+        if (config.authMode !== 'off' && req.authPubkey && upload.borrower !== req.authPubkey) {
+          return res.status(403).json({ error: 'Not authorized to view this upload', code: 'authz_mismatch' });
         }
         res.json(upload);
       } catch (error) {
@@ -2518,27 +2827,43 @@ class ApiServer {
       }
     });
 
-    // Get all uploads for a borrower
-this.app.get('/uploads/borrower/:borrower', async (req, res) => {
+    // Get all uploads for a borrower — `:borrower` must match the signer.
+this.app.get(
+  '/uploads/borrower/:borrower',
+  getIpLimit,
+  authMw(),
+  getPubkeyLimit,
+  async (req, res) => {
   try {
+    if (config.authMode !== 'off' && req.authPubkey && req.params.borrower !== req.authPubkey) {
+      return res.status(403).json({ error: 'Borrower in path does not match authenticated pubkey', code: 'authz_mismatch' });
+    }
     const uploads = await this.stateManager.getAllFileUploadsByBorrower(req.params.borrower);
-    
+
     // Sort by creation date (newest first)
     const sortedUploads = uploads.sort((a, b) => b.createdAt - a.createdAt);
-    
+
     res.json(sortedUploads);
   } catch (error) {
-    logger.error('Error fetching uploads for borrower', { 
-      borrower: req.params.borrower, 
-      error 
+    logger.error('Error fetching uploads for borrower', {
+      borrower: req.params.borrower,
+      error
     });
     res.status(500).json({ error: String(error) });
   }
 });
 
 // Optional: Add pagination support
-this.app.get('/uploads/borrower/:borrower/paginated', async (req, res) => {
+this.app.get(
+  '/uploads/borrower/:borrower/paginated',
+  getIpLimit,
+  authMw(),
+  getPubkeyLimit,
+  async (req, res) => {
   try {
+    if (config.authMode !== 'off' && req.authPubkey && req.params.borrower !== req.authPubkey) {
+      return res.status(403).json({ error: 'Borrower in path does not match authenticated pubkey', code: 'authz_mismatch' });
+    }
     const { limit = '10', offset = '0', status } = req.query;
     
     let uploads = await this.stateManager.getAllFileUploadsByBorrower(req.params.borrower);
@@ -2573,19 +2898,28 @@ this.app.get('/uploads/borrower/:borrower/paginated', async (req, res) => {
   }
 });
 
-// Optional: Delete an upload 
-this.app.delete('/uploads/:fileId', async (req, res) => {
+// Optional: Delete an upload
+this.app.delete(
+  '/uploads/:fileId',
+  notifyIpLimit,
+  authMw(),
+  notifyPubkeyLimit,
+  async (req, res) => {
   try {
     const upload = await this.stateManager.getFileUpload(req.params.fileId);
-    
+
     if (!upload) {
       return res.status(404).json({ error: 'Upload not found' });
     }
-    
-    // Verify the requester owns this upload (you'll need to pass borrower in request)
-    const { borrower } = req.body;
-    if (!borrower || upload.borrower !== borrower) {
-      return res.status(403).json({ error: 'Unauthorized to delete this upload' });
+
+    // Use the signed pubkey as the source of truth for authz. The legacy
+    // `borrower` field in the body is ignored when auth is enforced.
+    const requesterPubkey = config.authMode !== 'off' && req.authPubkey
+      ? req.authPubkey
+      : (req.body as { borrower?: string })?.borrower;
+
+    if (!requesterPubkey || upload.borrower !== requesterPubkey) {
+      return res.status(403).json({ error: 'Unauthorized to delete this upload', code: 'authz_mismatch' });
     }
     
     // Only allow deletion if not already deployed
@@ -2650,10 +2984,50 @@ this.app.delete('/uploads/:fileId', async (req, res) => {
         throw new Error(`Transaction not found after ${attempts} attempts: ${signature}`);
       }
 
-      logger.info('Transaction fetched successfully', { 
+      // ── B4: harden on-chain verification ────────────────────────────────
+      // Cheap up-front checks before we commit any expensive work to this tx.
+      // Auth already verified that the caller's signed body matches the
+      // `borrower` field; here we verify the *on-chain* tx really targets
+      // our program and was signed by that same borrower.
+      if (!verifiedSignatureCache.has(signature)) {
+        if (transaction.meta?.err) {
+          throw new Error(`On-chain transaction failed: ${JSON.stringify(transaction.meta.err)}`);
+        }
+
+        const accountKeys = transaction.transaction.message.getAccountKeys
+          ? transaction.transaction.message.getAccountKeys().keySegments().flat()
+          : (transaction.transaction.message as any).accountKeys as PublicKey[];
+
+        const programInTx = accountKeys.some((k) => k.equals(config.programId));
+        if (!programInTx) {
+          throw new Error(
+            `Transaction ${signature} does not reference Solignition program ${config.programId.toBase58()}`,
+          );
+        }
+
+        const borrowerPubkey = new PublicKey(borrower);
+        // Static signers come first in the account keys array. A loan
+        // request must have the borrower among the signers.
+        const numSigners = transaction.transaction.message.header.numRequiredSignatures;
+        const signers = accountKeys.slice(0, numSigners);
+        if (!signers.some((s) => s.equals(borrowerPubkey))) {
+          throw new Error(
+            `Borrower ${borrower} did not sign transaction ${signature}`,
+          );
+        }
+
+        verifiedSignatureCache.set(signature, true);
+        logger.info('Transaction passed on-chain verification', {
+          signature,
+          slot: transaction.slot,
+        });
+      } else {
+        logger.info('Transaction previously verified (cache hit)', { signature });
+      }
+
+      logger.info('Transaction fetched successfully', {
         signature,
         slot: transaction.slot,
-        transaction,
       });
 
       // Parse the transaction to extract loan details
@@ -2819,10 +3193,7 @@ async function main() {
 
     // Load keypairs
     logger.info('Loading keypairs...');
-    const deployerKeypairData = await fs.readFile(config.deployerKeypairPath, 'utf8');
-    const deployerKeypair = Keypair.fromSecretKey(
-      new Uint8Array(JSON.parse(deployerKeypairData))
-    );
+    const deployerKeypair = await getDeployerKeypair();
     logger.info(`Deployer public key: ${deployerKeypair.publicKey.toBase58()}`);
 
     // Initialize Anchor program
