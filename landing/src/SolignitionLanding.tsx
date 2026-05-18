@@ -5,7 +5,7 @@ import { useChainData, type FeedRow, type ChainStats } from './data/use-chain-da
 const APP_URL = 'https://app.solignition.xyz';
 const DOCS_URL = 'https://docs.solignition.xyz';
 const EXPLORE_URL = 'https://app.solignition.xyz/explore';
-const GITHUB_URL = 'https://github.com/solignition';
+const GITHUB_URL = 'https://github.com/Peacanduck/solignition';
 
 // =====================================================================
 // Shared primitives

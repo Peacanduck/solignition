@@ -20,3 +20,5 @@ binaries/
 # Logs
 *.log
 logs/
+
+.claude/
