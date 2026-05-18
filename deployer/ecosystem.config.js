@@ -2,7 +2,7 @@ module.exports = {
   apps : [{
     name: "deployer",
     script: "/home/pyro/solignition/deployer/dist/deployer/src/index.js",
-    watch: true,
+    watch: false,
     output:'./out.log',
     error:'./error.log',
     log:'./combined.outerr.log',

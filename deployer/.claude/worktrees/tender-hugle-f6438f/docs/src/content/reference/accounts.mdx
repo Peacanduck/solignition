@@ -1,0 +1,84 @@
+---
+title: Account types
+description: Field-level reference for ProtocolConfig, DepositorRecord, and Loan.
+---
+
+# Account types
+
+<p className="lede">
+  Three on-chain account types. One singleton, one per LP, one per loan. All sourced from `anchor/programs/solignition/src/state/`.
+</p>
+
+## ProtocolConfig
+
+Singleton. PDA seeds `["config"]`. Created by `initialize`, mutated by `update_config` / `set_paused`.
+
+| Field | Type | Description |
+|---|---|---|
+| `admin` | `Pubkey` | Wallet authorized to call admin-only instructions (`update_config`, `set_paused`, `claim_admin`, `set_deployed_program`, `recover_loan`). |
+| `treasury` | `Pubkey` | Destination for the protocol's revenue share. |
+| `deployer` | `Pubkey` | Off-chain service authorized to deploy programs, transfer authority, and reclaim SOL. |
+| `admin_fee_split_bps` | `u16` | Share of admin fee + interest that goes to LPs vs treasury. Default `5000` (50/50). |
+| `default_interest_rate_bps` | `u16` | Suggested interest rate when borrowers don't specify. Minimum `500` (5%). |
+| `default_admin_fee_bps` | `u16` | Suggested admin fee when borrowers don't specify. Minimum `500` (5%). |
+| `total_loans_outstanding` | `u64` | Sum of `principal` across all `Active` loans. |
+| `total_shares` | `u64` | Sum of `share_amount` across all `DepositorRecord` accounts. Denominator for the share-to-SOL ratio. |
+| `total_yield_distributed` | `u64` | Cumulative lamports of yield paid to LPs. Read-only telemetry. |
+| `loan_counter` | `u64` | Auto-incremented for each `request_loan`. The next loan's `loan_id`. |
+| `is_paused` | `bool` | Set by `set_paused`. When `true`, deposits / borrows / repays revert with `ProtocolPaused`. |
+| `bump` | `u8` | PDA bump seed. |
+
+## DepositorRecord
+
+One per LP. PDA seeds `["depositor", owner]`. Created on first `deposit`.
+
+| Field | Type | Description |
+|---|---|---|
+| `owner` | `Pubkey` | The LP's wallet. Must sign `withdraw`. |
+| `deposited_amount` | `u64` | Cumulative lamports deposited. Doesn't decrease on yield accrual. |
+| `share_amount` | `u64` | LP's current share balance. Diverges from `deposited_amount` as yield accrues. Used to compute redemption: `payout = share_amount × vault_balance / total_shares`. |
+| `last_update_ts` | `i64` | Last time the record was touched. Unix seconds. |
+| `bump` | `u8` | PDA bump seed. |
+
+## Loan
+
+One per loan. PDA seeds `["loan", loan_id, borrower]`. Created by `request_loan`.
+
+| Field | Type | Description | Populated when |
+|---|---|---|---|
+| `loan_id` | `u64` | Snapshot of `ProtocolConfig.loan_counter` at request time. | `request_loan` |
+| `borrower` | `Pubkey` | The wallet that requested the loan. Must sign `repay_loan`. | `request_loan` |
+| `program_pubkey` | `Pubkey` | The deployed program. `Pubkey::default()` until set. | `set_deployed_program` |
+| `principal` | `u64` | Lamports disbursed from the vault. | `request_loan` |
+| `duration` | `i64` | Loan term in seconds. | `request_loan` |
+| `interest_rate_bps` | `u16` | Annualized... no, linear, time-prorated. See [Interest math](/protocol/interest). | `request_loan` |
+| `admin_fee_bps` | `u16` | Admin fee rate, paid upfront. | `request_loan` |
+| `admin_fee_paid` | `u64` | Lamports the borrower paid as admin fee. Already in the protocol. | `request_loan` |
+| `start_ts` | `i64` | Unix seconds when the loan was requested. Used for `elapsed = now - start_ts`. | `request_loan` |
+| `state` | `LoanState` | See [Loan lifecycle](/protocol/lifecycle). | `request_loan`, mutated throughout |
+| `authority_pda` | `Pubkey` | The escrow PDA holding upgrade authority during the loan. | `request_loan` |
+| `repaid_ts` | `Option<i64>` | Unix seconds of repay. | `repay_loan` |
+| `recovered_ts` | `Option<i64>` | Unix seconds of recovery. | `recover_loan` |
+| `interest_paid` | `Option<u64>` | Lamports of interest actually paid. | `repay_loan` |
+| `reclaimed_amount` | `Option<u64>` | Lamports returned to the vault after closing the program. | `return_reclaimed_sol` |
+| `reclaimed_ts` | `Option<i64>` | Unix seconds of `return_reclaimed_sol`. | `return_reclaimed_sol` |
+| `bump` | `u8` | PDA bump seed. | `request_loan` |
+
+## LoanState enum
+
+| Variant | Meaning |
+|---|---|
+| `Pending` | `request_loan` succeeded; deployer hasn't deployed yet. |
+| `Active` | Program deployed. Interest is accruing. |
+| `RepaidPendingTransfer` | Borrower called `repay_loan`. Authority not yet transferred. |
+| `Repaid` | Deployer called `transfer_authority_to_borrower`. Borrower now controls the program. Terminal state. |
+| `Recovered` | Loan expired without repay. `recover_loan` ran. Program account closed. |
+| `Reclaimed` | `return_reclaimed_sol` ran. Recovered SOL is back in the vault. Terminal state. |
+
+See [Loan lifecycle](/protocol/lifecycle) for the full state diagram.
+
+<NextSteps steps={[
+  { title: 'On-chain program', description: 'Instructions, events, PDA seeds', to: '/reference/program' },
+  { title: 'Error codes', description: 'All 22 error codes with cause + remedy', to: '/reference/errors' },
+  { title: 'Loan lifecycle', description: 'State machine for the Loan account', to: '/protocol/lifecycle' },
+]} />

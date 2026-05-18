@@ -1,0 +1,116 @@
+---
+title: Install the CLI
+description: Pick a distribution channel and verify it works.
+---
+
+# Install the CLI
+
+<p className="lede">
+  The CLI ships through three channels. Pick the one that matches your stack and verify the install before you try to deploy.
+</p>
+
+<Callout kind="tldr">
+  **tl;dr —** `cargo install solignition-cli` if you have Rust. `npm i -g solignition` if you don't. Then `solignition --version` and `solignition health` to verify.
+</Callout>
+
+## Pick a channel
+
+| Channel | Best for | What you need |
+|---|---|---|
+| **crates.io** | Rust devs who already have a toolchain | `rustup` + a working `cargo` |
+| **npm / yarn** | Everyone else | Node 18+ |
+| **Prebuilt binary** | CI / locked-down environments | nothing but `unzip` and a `PATH` |
+| **From source** | Hacking on the CLI itself | Rust 1.75+, Solana CLI, git |
+
+## crates.io
+
+```bash
+cargo install solignition-cli
+```
+
+Binary lands at `~/.cargo/bin/solignition`. Make sure `~/.cargo/bin` is on your `PATH`.
+
+## npm / yarn
+
+```bash
+npm install -g solignition
+# or
+yarn global add solignition
+```
+
+The npm package ships precompiled binaries for Linux x64/arm64, macOS x64/arm64, and Windows x64 — no Rust toolchain required.
+
+## Prebuilt binaries
+
+Download the archive for your platform from the [latest GitHub release](https://github.com/Peacanduck/solignition-cli/releases/latest), extract, and put `solignition` (or `solignition.exe`) somewhere on your `PATH`.
+
+```bash
+curl -L https://github.com/Peacanduck/solignition-cli/releases/latest/download/solignition-linux-x64.tar.gz | tar xz
+sudo mv solignition /usr/local/bin/
+```
+
+## From source
+
+```bash
+git clone https://github.com/Peacanduck/solignition-cli
+cd solignition-cli
+cargo build --release
+# Binary at target/release/solignition
+```
+
+**Prerequisites for source builds:**
+
+- Rust 1.75+ — `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+- Solana CLI tools (for keypair management)
+- A funded Solana keypair
+
+## Verify
+
+```bash
+solignition --version
+# solignition 0.x.y
+
+solignition health
+# ✓ deployer reachable at https://api.solignition.ngrok.app
+```
+
+If `health` fails, your `api_url` is wrong or the deployer service is down — check the [GitHub issues](https://github.com/Peacanduck/solignition-cli/issues) or ping the [Discord](https://discord.gg/7yBEb7GUee).
+
+## Configuration
+
+The CLI reads config from `~/.solignition/config.toml`:
+
+```toml
+api_url = "https://api.solignition.ngrok.app"
+rpc_url = "https://api.devnet.solana.com"
+keypair_path = "/home/you/.config/solana/id.json"
+program_id = "HVzpjSxwECnb6uY9Jnia48oJp4xrQiz5jgc5hZC5df63"
+```
+
+You don't need to write this by hand — `solignition init` walks you through it interactively.
+
+### Environment variables
+
+All config values can be overridden via env vars (useful in CI):
+
+| Variable | What it overrides |
+|---|---|
+| `SOLIGNITION_API_URL` | Deployer API endpoint |
+| `SOLANA_RPC_URL` | Solana RPC endpoint |
+| `SOLIGNITION_KEYPAIR` | Path to wallet keypair |
+| `SOLIGNITION_PROGRAM_ID` | Solignition program ID |
+
+### Global flags
+
+Global CLI flags override both the config file and env vars:
+
+```bash
+solignition --api-url https://api.example.com --rpc-url https://rpc.example.com status 0
+```
+
+Use this for one-off operations against a non-default deployment.
+
+<NextSteps steps={[
+  { title: 'Quickstart', description: 'Deploy your first program in five minutes', to: '/get-started/quickstart' },
+  { title: 'Borrow & deploy', description: 'End-to-end mental model', to: '/builders/borrow-flow' },
+]} />

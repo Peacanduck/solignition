@@ -1,0 +1,95 @@
+---
+title: How it works
+description: One singleton config + per-LP records + per-loan records + an off-chain deployer that listens and acts.
+---
+
+# How it works
+
+<p className="lede">
+  Solignition is a peer-to-pool lender for Solana program deployments. LPs supply SOL to a single vault; borrowers draw loans against that vault to pay for deploys; an off-chain deployer service orchestrates the on-chain pieces.
+</p>
+
+<Callout kind="tldr">
+  **tl;dr —** Three account types (`ProtocolConfig`, `DepositorRecord`, `Loan`), four functional PDAs (vault, authority escrow, admin, treasury), and one trusted off-chain service (the deployer). Every state change emits a typed event.
+</Callout>
+
+## The three on-chain accounts
+
+| Account | Cardinality | Seeds | Holds |
+|---|---|---|---|
+| `ProtocolConfig` | Singleton | `["config"]` | Admin / treasury / deployer pubkeys, default rates, counters, pause flag. |
+| `DepositorRecord` | One per LP | `["depositor", owner]` | An LP's share balance and history. |
+| `Loan` | One per loan | `["loan", loan_id, borrower]` | Principal, term, rate, state, escrowed authority. |
+
+Field-level reference: [Account types](/reference/accounts).
+
+## The functional PDAs
+
+These don't hold Anchor account state — they're SOL-bearing PDAs the program signs for.
+
+| PDA | Seeds | Purpose |
+|---|---|---|
+| Vault | `["vault"]` | Holds all LP deposits and accrued interest. Source of borrowed SOL; destination on repay. |
+| Authority escrow | `["authority"]` | Upgrade authority for every active loan's deployed program. Released to the borrower on repay. |
+| Admin PDA | `["admin"]` | The admin's accumulated share, awaiting `claim_admin`. |
+| Treasury PDA | `["treasury"]` | Protocol revenue. |
+
+## The deployer service
+
+The deployer is an off-chain process whose pubkey is stored in `ProtocolConfig.deployer`. It signs three instructions:
+
+- **`set_deployed_program`** — after publishing a borrower's `.so` to the BPF Upgradeable Loader, records the resulting program pubkey on the `Loan` and flips state to `Active`.
+- **`transfer_authority_to_borrower`** — on repay, CPIs into the BPF Upgradeable Loader to move upgrade authority from the escrow PDA to the borrower.
+- **`recover_loan`** + **`return_reclaimed_sol`** — on expiry without repay, closes the program and pushes the recovered rent back into the vault.
+
+The deployer never holds custody of LP funds. It signs CPIs the program authorizes via PDA seeds.
+
+## Lifecycle in one diagram
+
+<CodeBlock title="protocol topology" lang="ascii" rawCode={`┌────────┐  deposit  ┌──────────┐  request_loan   ┌──────────┐
+│   LP   │ ────────▶ │  vault   │ ◀────────────── │ borrower │
+│        │ ◀── yield │   PDA    │   ── disburse ─▶│          │
+└────────┘           └────┬─────┘                 └────┬─────┘
+                          │                            │
+                          │ LoanRequested event        │
+                          ▼                            ▼
+                  ┌──────────────┐  set_deployed   ┌─────────┐
+                  │   deployer   │ ──────────────▶ │  Loan   │
+                  │  (off-chain) │   transfer      │  PDA    │
+                  │              │ ◀────────────── │ Active  │
+                  └──────┬───────┘   on repay      └────┬────┘
+                         │ recover_loan + return_reclaimed_sol
+                         ▼   (on expiry)               │
+                  ┌──────────────┐                     │
+                  │  closed prog │ ─── SOL ───▶ vault  │
+                  └──────────────┘                     │`}>
+{`┌────────┐  deposit  ┌──────────┐  request_loan   ┌──────────┐
+│   LP   │ ────────▶ │  vault   │ ◀────────────── │ borrower │
+│        │ ◀── yield │   PDA    │   ── disburse ─▶│          │
+└────────┘           └────┬─────┘                 └────┬─────┘
+                          │                            │
+                          │ LoanRequested event        │
+                          ▼                            ▼
+                  ┌──────────────┐  set_deployed   ┌─────────┐
+                  │   deployer   │ ──────────────▶ │  Loan   │
+                  │  (off-chain) │   transfer      │  PDA    │
+                  │              │ ◀────────────── │ Active  │
+                  └──────┬───────┘   on repay      └────┬────┘
+                         │ recover_loan + return_reclaimed_sol
+                         ▼   (on expiry)               │
+                  ┌──────────────┐                     │
+                  │  closed prog │ ─── SOL ───▶ vault  │
+                  └──────────────┘                     │`}
+</CodeBlock>
+
+## Trust assumptions
+
+- **Admin pubkey** can pause the protocol, rotate the deployer / treasury / admin keys, and update default rates. Stored in `ProtocolConfig.admin`.
+- **Deployer pubkey** is trusted to honestly run the off-chain deploy / authority-transfer / recovery work. It cannot move LP funds out of the vault — every SOL flow is gated by an on-chain instruction that checks PDA seeds.
+- **No custodial holdings.** LP SOL lives in the vault PDA. Borrower SOL flows directly to the vault on repay. The deployer signs CPIs but never receives LP funds.
+
+<NextSteps steps={[
+  { title: 'Loan lifecycle', description: 'State machine for the Loan account', to: '/protocol/lifecycle' },
+  { title: 'Interest math', description: 'How interest is calculated', to: '/protocol/interest' },
+  { title: 'Fees & treasury', description: 'Where every lamport goes', to: '/protocol/fees' },
+]} />

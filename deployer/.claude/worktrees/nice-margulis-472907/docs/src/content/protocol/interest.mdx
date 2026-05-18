@@ -1,0 +1,84 @@
+---
+title: Interest math
+description: Linear, time-prorated interest. No compounding. Paid on repay.
+---
+
+# Interest math
+
+<p className="lede">
+  Interest is linear and time-prorated. There is no compounding. The admin fee is paid upfront and separate from interest.
+</p>
+
+<Callout kind="tldr">
+  **tl;dr —** `interest = principal × interest_rate_bps / 10_000 × elapsed_seconds / duration_seconds`. Early repay is cheaper. Late repay isn't possible.
+</Callout>
+
+## The formula
+
+When you call `repay_loan`, the program computes:
+
+```
+elapsed = now - loan.start_ts
+interest = (principal × interest_rate_bps × elapsed) / (10_000 × duration)
+total_owed = principal + interest
+```
+
+All in lamports, all `u64` arithmetic, all on-chain.
+
+## Worked example
+
+A borrower opens a 30-day loan at the protocol default rate:
+
+- `principal` = 4 SOL = `4_000_000_000` lamports
+- `interest_rate_bps` = 500 (5%)
+- `duration` = `2_592_000` seconds (30 days)
+
+If they repay after 5 days (`elapsed = 432_000`):
+
+```
+interest = (4_000_000_000 × 500 × 432_000) / (10_000 × 2_592_000)
+         = 33_333_333 lamports
+         ≈ 0.0333 SOL
+```
+
+If they repay at the very end of the term (`elapsed = duration`):
+
+```
+interest = (4_000_000_000 × 500 × 2_592_000) / (10_000 × 2_592_000)
+         = 200_000_000 lamports
+         = 0.2 SOL
+```
+
+So a 30-day loan at 5% costs at most 5% of the principal in interest. Held for 25% of the term, you pay 25% of that max — 0.05 SOL.
+
+## Why linear
+
+Compounding interest is a footgun for short-term loans on a per-block clock. Linear interest:
+
+- Caps the upside at `principal × rate`, which is easy to reason about.
+- Makes early repay strictly cheaper (no penalty term).
+- Doesn't require frequent on-chain state updates.
+
+## The admin fee is separate
+
+The admin fee runs on a different mechanism:
+
+- Paid in full at `request_loan`, debited from the borrower's wallet.
+- Stored in `Loan.admin_fee_paid` for the record.
+- Does **not** accrue. Does **not** refund on early repay.
+- Distributed at `repay_loan` (or `recover_loan` on default) via `admin_fee_split_bps`.
+
+Practically: the admin fee is the protocol's origination cost. Interest is the LP's yield.
+
+## Where it runs
+
+The math lives in the `repay_loan` handler in the Anchor program. Watch for:
+
+- **`MathOverflow` (error 6018)** — possible if `principal × interest_rate_bps × elapsed` overflows `u64`. At realistic SOL amounts this is unreachable, but custom builds with huge principals could hit it.
+- **`LoanExpired` (error 6020)** — interest is only payable inside `[start_ts, start_ts + duration]`. After that, repay is closed and the loan moves toward recovery.
+
+<NextSteps steps={[
+  { title: 'Loan lifecycle', description: 'States and transitions', to: '/protocol/lifecycle' },
+  { title: 'Fees & treasury', description: 'Admin fee split and treasury controls', to: '/protocol/fees' },
+  { title: 'Repaying loans', description: 'The borrower-side flow', to: '/builders/repay' },
+]} />

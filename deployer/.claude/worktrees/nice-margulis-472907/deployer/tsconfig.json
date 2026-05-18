@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strictPropertyInitialization": false,
+    "resolveJsonModule": true,
+    "strict": false,
+    "outDir": "dist",
+    //"rootDir": "src",
+    "types": ["node","mocha","chai","jest"],
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@coral-xyz/anchor": ["../node_modules/@coral-xyz/anchor"],
+      "@/*": ["./src/*"]
+      
+    }
+  },
+  "include": ["src", "tests", "../anchor/target/types/**/*"],
+  "exclude": ["node_modules"]
+}

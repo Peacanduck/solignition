@@ -1,0 +1,62 @@
+---
+title: Error codes
+description: All 22 Anchor error codes with likely cause and remedy.
+---
+
+# Error codes
+
+<p className="lede">
+  Reverse lookup: code → name → message → why it probably fired. Codes are zero-indexed in the IDL; Anchor adds the `6000` offset on-chain.
+</p>
+
+<Callout kind="info">
+  **Tip —** When a transaction simulation fails, look for `custom program error: 0x17ad` (or similar hex). Convert to decimal, subtract 6000, and look up the index in the table below.
+</Callout>
+
+## Codes
+
+| Code | Name | Message | You probably hit this when... |
+|---|---|---|---|
+| `6000` | `ProtocolPaused` | Protocol is currently paused | Admin set `is_paused = true`. Wait or contact ops. |
+| `6001` | `InvalidAmount` | Invalid amount provided | Passed `0` to `deposit` / `withdraw` / `return_reclaimed_sol`, or a nonsensical value for the instruction. |
+| `6002` | `InsufficientBalance` | Insufficient balance | Your wallet doesn't have the SOL to cover the requested action (admin fee, repay total, etc.). |
+| `6003` | `InsufficientLiquidity` | Insufficient liquidity in vault | The vault doesn't have enough idle SOL: borrows are limited by `vault_balance - locked_principal`; withdrawals can hit this too. |
+| `6004` | `InvalidDuration` | Invalid duration | Duration must be one of `604800` (7d), `2592000` (30d), `5184000` (60d), `7776000` (90d). Other values are rejected. |
+| `6005` | `InvalidInterestRate` | Invalid interest rate | Below the `500` bps minimum. Pass at least `500`. |
+| `6006` | `InvalidAdminFee` | Invalid admin fee | Below the `500` bps minimum. Pass at least `500`. |
+| `6007` | `LoanNotActive` | Loan is not active | Tried to act on a loan whose `state` isn't `Active` (e.g. repaying a `Pending` or already-`Repaid` loan). |
+| `6008` | `UnauthorizedBorrower` | Unauthorized borrower | The signer's pubkey doesn't match `Loan.borrower`. Only the original borrower can repay. |
+| `6009` | `LoanNotExpired` | Loan has not expired yet | Tried `recover_loan` before `now > start_ts + duration`. |
+| `6010` | `LoanNotRecovered` | Loan has not been recovered | Tried `return_reclaimed_sol` before `recover_loan` ran. |
+| `6011` | `LoanNotRepaid` | Loan has not been repaid | Tried `transfer_authority_to_borrower` before `repay_loan` ran. |
+| `6012` | `Unauthorized` | Unauthorized action | Signer isn't the admin / deployer / borrower the instruction expects. |
+| `6013` | `InvalidParameter` | Invalid parameter | Generic catch-all for arg validation. Check the instruction's args against [reference/program](/reference/program). |
+| `6014` | `UnauthorizedDepositor` | Unauthorized depositor | The `withdraw` signer doesn't own the `DepositorRecord` they're trying to burn shares from. |
+| `6015` | `InvalidLoanId` | Invalid loan ID | The `loan_id` arg doesn't match the PDA derivation (`["loan", loan_id, borrower]`). Wrong borrower for that ID is the usual cause. |
+| `6016` | `ProgramAlreadySet` | Program already set for this loan | `set_deployed_program` was called twice for the same loan. The first deploy wins. |
+| `6017` | `InvalidProgram` | Invalid program pubkey | `program_pubkey` passed to `set_deployed_program` failed validation (e.g. `Pubkey::default()`). |
+| `6018` | `MathOverflow` | Error in calculations | Arithmetic overflow in interest, share, or rent math. Extremely unlikely at realistic SOL amounts. |
+| `6019` | `NoYieldToClaim` | No yield to claim | LP tried to claim yield but `share_amount × vault_balance / total_shares <= deposited_amount`. |
+| `6020` | `LoanExpired` | Loan has expired and can no longer be repaid | Tried `repay_loan` after `now > start_ts + duration`. There is no grace period. |
+| `6021` | `ClockError` | Error calculating elapsed time | Failed to read the Solana clock sysvar. Retry the tx. |
+
+## Reading errors in clients
+
+**Anchor TS client:**
+
+```ts
+try {
+  await program.methods.repayLoan(new BN(loanId)).rpc()
+} catch (err) {
+  if (err.error?.errorCode?.code === 'LoanExpired') {
+    // handle expiry path
+  }
+}
+```
+
+**Raw web3.js:** parse the `InstructionError: { Custom: <number> }` in the failed-tx logs. The custom number minus `6000` is the IDL index.
+
+<NextSteps steps={[
+  { title: 'On-chain program', description: 'Instructions and events', to: '/reference/program' },
+  { title: 'Account types', description: 'ProtocolConfig, DepositorRecord, Loan', to: '/reference/accounts' },
+]} />

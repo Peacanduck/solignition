@@ -1,0 +1,142 @@
+/*action "solignition_protocol_initialized" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    event {
+        name = "ProtocolInitialized"
+    }
+}
+
+
+action "solignition_authority_transferred" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    event {
+        name = "AuthorityTransferred"
+    }
+}
+
+action "solignition_config_updated" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    event {
+        name = "ConfigUpdated"
+    }
+}
+
+action "solignition_deposited" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    event {
+        name = "Deposited"
+    }
+}
+
+action "solignition_loan_deployed" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    event {
+        name = "LoanDeployed"
+    }
+}
+
+action "solignition_loan_recovered" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    event {
+        name = "LoanRecovered"
+    }
+}
+
+action "solignition_loan_repaid" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    event {
+        name = "LoanRepaid"
+    }
+}
+
+action "solignition_set_deployed_program" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    event {
+        name = "LoanDeployed"
+    }
+}
+
+action "solignition_loan_requested" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    event {
+        name = "LoanRequested"
+    }
+}
+
+action "solignition_protocol_paused_changed" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    event {
+        name = "ProtocolPausedChanged"
+    }
+}
+
+action "solignition_sol_reclaimed" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    event {
+        name = "SolReclaimed"
+    }
+}
+
+action "solignition_withdrawn" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    event {
+        name = "Withdrawn"
+    }
+}
+
+action "index_protocol_config" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    pda {
+        type = "ProtocolConfig"
+        instruction {
+            name="initialize"
+            account_name="protocol_config"
+        }
+    }
+}
+
+action "index_loans" "svm::deploy_subgraph" {
+    program_id = action.deploy_solignition.program_id
+    program_idl = action.deploy_solignition.program_idl
+    slot = action.deploy_solignition.slot
+    pda {
+        type = "Loan"
+        instruction {
+            name="request_loan"
+            account_name="loan"
+        }
+        instruction {
+            name="set_deployed_program"
+            account_name="loan"
+        }
+        instruction {
+            name="transfer_authority_to_borrower"
+            account_name="loan"
+        }
+    }
+}*/
