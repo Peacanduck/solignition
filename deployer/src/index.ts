@@ -22,8 +22,7 @@ import { Registry, Gauge, Counter, Histogram } from 'prom-client';
 import * as dotenv from 'dotenv';
 import { Level } from 'level';
 import { GraphQLClient, gql } from 'graphql-request';
-import { exec, spawn } from 'child_process';
-import { promisify } from 'util';
+import { spawn } from 'child_process';
 import cors from 'cors';
 import helmet from 'helmet';
 import { v4 as uuidv4 } from 'uuid';
@@ -41,8 +40,6 @@ import { registerLoanRoutes } from './api/routes/loans';
 import { registerUploadRoutes } from './api/routes/uploads';
 import { registerDeploymentRoutes } from './api/routes/deployments';
 import type { RouteDeps } from './api/routes/types';
-
-const execAsync = promisify(exec);
 
 // Load environment variables
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -618,6 +615,42 @@ class BinaryManager {
 }
 
 // ============ Solana CLI Deployer ============
+/**
+ * Spawn a child process with an explicit arg array -- never a shell-
+ * interpreted string. Step 3.6 of the OWASP hardening plan: replaces
+ * exec(`solana program deploy ${binaryPath} ...`) which would be shell-
+ * injectable if any of the interpolated values ever became attacker-
+ * controlled. Inputs today are server-controlled (uuid temp paths, env-
+ * configured CLI/RPC URLs, fs.stat() sizes), but `spawn` removes the
+ * shell entirely so future additions can't accidentally regress.
+ */
+function runCliCapture(
+  command: string,
+  args: string[],
+  opts: { input?: string } = {},
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { shell: false });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString('utf8');
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf8');
+    });
+    child.on('error', (err) => reject(err));
+    child.on('close', (exitCode) => {
+      resolve({ stdout, stderr, exitCode: exitCode ?? -1 });
+    });
+    if (opts.input) {
+      child.stdin.end(opts.input);
+    } else {
+      child.stdin.end();
+    }
+  });
+}
+
 class SolanaCliDeployer {
   private connection: Connection;
   private deployerKeypairPath: string;
@@ -640,23 +673,26 @@ class SolanaCliDeployer {
       const programKeypairPath = `/tmp/program-${programKeypair.publicKey.toBase58()}.json`;
       await fs.writeFile(programKeypairPath, JSON.stringify(Array.from(programKeypair.secretKey)));
 
-      // Build the deploy command
-      const deployCommand = `${config.solanaCliPath || 'solana'} program deploy ${binaryPath} \
-        --program-id ${programKeypairPath} \
-        --keypair ${this.deployerKeypairPath} \
-        --url ${config.rpcUrl} \
-        --commitment confirmed`;
+      // Build the deploy command. Arg array, no shell -- see runCliCapture.
+      const solanaBin = config.solanaCliPath || 'solana';
+      const deployArgs = [
+        'program',
+        'deploy',
+        binaryPath,
+        '--program-id', programKeypairPath,
+        '--keypair', this.deployerKeypairPath,
+        '--url', config.rpcUrl,
+        '--commitment', 'confirmed',
+      ];
 
-      logger.info('Executing deploy command', { command: deployCommand });
+      logger.info('Executing deploy command', { command: solanaBin, args: deployArgs });
 
-      // Execute the deployment
-      const { stdout, stderr } = await execAsync(deployCommand);
+      const { stdout, stderr, exitCode } = await runCliCapture(solanaBin, deployArgs);
 
-      console.log('deploy command output:', stdout);
-      console.log('deploy command error output:', stderr);
-      
-      if (stderr && !stderr.includes('Program Id:')) {
-        throw new Error(`Deployment error: ${stderr}`);
+      logger.debug('deploy.cli_output', { stdout, stderr, exitCode });
+
+      if (exitCode !== 0 || (stderr && !stderr.includes('Program Id:'))) {
+        throw new Error(`Deployment error (exit ${exitCode}): ${stderr || stdout}`);
       }
 
       // Parse the program ID from output
@@ -695,17 +731,21 @@ class SolanaCliDeployer {
     try {
       logger.info('Closing program using Solana CLI', { programId });
 
-      const closeCommand = `${config.solanaCliPath || 'solana'} program close ${programId} \
-        --keypair ${this.deployerKeypairPath} \
-        --url ${config.rpcUrl} \
-        --bypass-warning \
-        --commitment confirmed`;
+      const solanaBin = config.solanaCliPath || 'solana';
+      const closeArgs = [
+        'program',
+        'close',
+        programId,
+        '--keypair', this.deployerKeypairPath,
+        '--url', config.rpcUrl,
+        '--bypass-warning',
+        '--commitment', 'confirmed',
+      ];
 
-      const { stdout, stderr } = await execAsync(closeCommand);
-      console.log('close command output:', stdout);
-      console.log('close command error output:', stderr);
-      if (stderr && !stderr.includes('closed')) {
-        throw new Error(`Close error: ${stderr}`);
+      const { stdout, stderr, exitCode } = await runCliCapture(solanaBin, closeArgs);
+      logger.debug('close.cli_output', { stdout, stderr, exitCode });
+      if (exitCode !== 0 || (stderr && !stderr.includes('closed'))) {
+        throw new Error(`Close error (exit ${exitCode}): ${stderr || stdout}`);
       }
 
       // Parse signature from output if available
@@ -742,18 +782,16 @@ class SolanaCliDeployer {
     }
     
     logger.info('Estimating rent for file', { sizeInBytes });
-    
-    // Build the rent command
-    const rentCommand = `${config.solanaCliPath || 'solana'} rent ${sizeInBytes} \
-      --url ${config.rpcUrl}`;
-    
-    logger.info('Executing rent command', { command: rentCommand });
-    
-    // Execute the rent estimation
-    const { stdout, stderr } = await execAsync(rentCommand);
-    
-    if (stderr) {
-      throw new Error(`Rent estimation error: ${stderr}`);
+
+    const solanaBin = config.solanaCliPath || 'solana';
+    const rentArgs = ['rent', String(sizeInBytes), '--url', config.rpcUrl];
+
+    logger.info('Executing rent command', { command: solanaBin, args: rentArgs });
+
+    const { stdout, stderr, exitCode } = await runCliCapture(solanaBin, rentArgs);
+
+    if (exitCode !== 0 || stderr) {
+      throw new Error(`Rent estimation error (exit ${exitCode}): ${stderr || stdout}`);
     }
     
     // Parse the rent amount from output
