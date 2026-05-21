@@ -205,11 +205,12 @@ The service validates binaries before deployment:
 
 ## Monitoring
 
-### Health Endpoints
+### Health & spec endpoints
 
-- `GET /health` - Service health status
-- `GET /metrics` - Prometheus metrics
-- `GET /deployments/:loanId` - Deployment status
+- `GET /health` — service health status (returns `{"status":"ok"}`)
+- `GET /metrics` — Prometheus metrics
+- `GET /openapi.json` — machine-readable OpenAPI 3.1 spec for the v1 API
+- `GET /docs` — Swagger UI rendered from the spec (the canonical, always-current API reference)
 
 ### Metrics
 
@@ -325,8 +326,11 @@ LOG_LEVEL=debug npm start
 
 #### Stuck Deployment
 ```bash
-# Manually mark as failed
-curl -X POST http://localhost:3000/admin/reset/:loanId
+# Kick off the expired-loan recovery sweep against the orchestrator.
+# Returns 202 Accepted; check the deployer logs for completion.
+curl -X POST http://localhost:3000/v1/jobs/expired-loan-check \
+  -H "X-Auth-Pubkey: ..." -H "X-Auth-Timestamp: ..." \
+  -H "X-Auth-Nonce: ..." -H "X-Auth-Signature: ..."
 ```
 
 #### Database Corruption
@@ -338,40 +342,59 @@ cp -r deployer-state deployer-state.backup
 npm run rebuild-state
 ```
 
-## API Reference
+## API Reference (v1)
 
-### HTTP Endpoints
+The full, machine-readable API contract lives at `/openapi.json` (served by
+the running deployer) and is rendered as Swagger UI at `/docs`. The summary
+below is the same information in table form for quick lookup.
 
-#### GET /health
-Returns service health status.
+All v1 endpoints require the `solignition-auth-v1` wallet signature: four
+`X-Auth-*` headers per request (Pubkey, Timestamp, Nonce, Signature). See
+`deployer/src/auth.ts` for the canonical message format.
 
-Response:
+### Ops endpoints (unauthenticated, unversioned)
+
+| Method | Path             | Returns                          |
+| ------ | ---------------- | -------------------------------- |
+| GET    | `/health`        | `{"status":"ok"}`                |
+| GET    | `/metrics`       | Prometheus text exposition       |
+| GET    | `/openapi.json`  | OpenAPI 3.1 spec for /v1         |
+| GET    | `/docs`          | Swagger UI for the spec          |
+
+### v1 endpoints
+
+| Method | Path                                | Purpose                                    | Success status |
+| ------ | ----------------------------------- | ------------------------------------------ | --------------- |
+| POST   | `/v1/uploads`                       | Upload a Solana program binary (.so)       | 201 + `Location` |
+| GET    | `/v1/uploads/:fileId`               | Read an upload by id                       | 200             |
+| GET    | `/v1/uploads?borrower=&status=&limit=&offset=` | List uploads (paginated; max 200) | 200 |
+| DELETE | `/v1/uploads/:fileId`               | Delete an upload (not allowed once deployed) | 204           |
+| POST   | `/v1/loans`                         | Record a new loan-request event            | 201             |
+| POST   | `/v1/loans/:loanId/repayments`      | Record a repayment event                   | 201             |
+| GET    | `/v1/loans/:loanId/status`          | Aggregated loan-lifecycle status enum      | 200             |
+| GET    | `/v1/deployments/:loanId`           | Read deployment by loanId                  | 200             |
+| GET    | `/v1/deployments?borrower=&limit=&offset=` | List deployments (paginated; max 200) | 200       |
+| POST   | `/v1/jobs/expired-loan-check`       | Kick off the expired-loan recovery sweep   | 202             |
+
+### Status code policy
+
+`200` read · `201` create (+ `Location`) · `202` async job · `204` delete ·
+`400` malformed · `401` unauthenticated · `403` authorization mismatch
+(`code: "authz_mismatch"`) · `404` missing · `409` conflict (e.g. dup hash) ·
+`413` payload too large · `422` schema validation failed · `429` rate limit ·
+`500` server error.
+
+### Error envelope
+
+Every error response shares one shape:
+
 ```json
-{
-  "status": "healthy",
-  "activeLoans": 5,
-  "totalDeployments": 42,
-  "timestamp": "2024-01-01T00:00:00Z"
-}
+{ "error": "human message", "code": "machine_code", "requestId": "uuid" }
 ```
 
-#### GET /metrics
-Returns Prometheus metrics in text format.
-
-#### GET /deployments/:loanId
-Returns deployment status for a specific loan.
-
-Response:
-```json
-{
-  "loanId": "123",
-  "borrower": "...",
-  "programId": "...",
-  "status": "deployed",
-  "createdAt": 1234567890,
-  "updatedAt": 1234567890
-}
-```
+`code` is stable and machine-readable; `error` is for humans. `requestId`
+echoes the `X-Request-Id` header (server-generated if the client didn't
+send one) so support tickets can correlate to deployer logs.
 
 ## Development Workflow
 
