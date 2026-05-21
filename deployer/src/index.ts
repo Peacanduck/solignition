@@ -2606,15 +2606,43 @@ class ApiServer {
 }
 
 // ============ Main Application ============
+/**
+ * Refuse to boot in `off` auth mode when NODE_ENV=production. Step 3.1 of
+ * the OWASP hardening plan: the route-level authz check now always runs
+ * when a pubkey was authenticated, but `off` mode skips authentication
+ * entirely (no req.authPubkey set), which would still permit cross-user
+ * access if it ever shipped to production. Failing loudly at boot is the
+ * least-surprise way to prevent that.
+ */
+function assertAuthSafeForProduction(): void {
+  const isProd = process.env.NODE_ENV === 'production';
+  if (isProd && config.authMode === 'off') {
+    const msg =
+      'Refusing to start: REQUIRE_AUTH=off is not allowed when NODE_ENV=production. ' +
+      'Set REQUIRE_AUTH=enforce (recommended) or REQUIRE_AUTH=warn during rollout.';
+    logger.error('boot.auth_mode_unsafe', { authMode: config.authMode, nodeEnv: process.env.NODE_ENV });
+    throw new Error(msg);
+  }
+  if (isProd && config.authMode === 'warn') {
+    logger.warn('boot.auth_mode_warn_in_prod', {
+      authMode: config.authMode,
+      message:
+        'REQUIRE_AUTH=warn lets unsigned requests through (logged only). Acceptable for staged rollout but should be flipped to `enforce` once clients are migrated.',
+    });
+  }
+}
+
 async function main() {
-  logger.info('Starting Solana Lending Protocol Deployer Service', { 
+  logger.info('Starting Solana Lending Protocol Deployer Service', {
     config: {
       ...config,
       programId: config.programId.toBase58()
-    } 
+    }
   });
 
   try {
+    assertAuthSafeForProduction();
+
     // Initialize directories
     await fs.mkdir(config.binaryStoragePath, { recursive: true });
     await fs.mkdir(config.uploadPath, { recursive: true });
