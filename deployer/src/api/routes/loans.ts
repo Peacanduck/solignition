@@ -18,7 +18,37 @@ import {
   CreateRepaymentBody,
   CreateRepaymentResponse,
   LoanIdParam,
+  LoanStatusResponse,
 } from '../schemas';
+import type { DeploymentRecord } from './types';
+
+/**
+ * Map the internal DeploymentRecord.status to the public LoanStatus enum.
+ * `recovered`/`recovering` collapse to `expired` since they only happen for
+ * loans the borrower failed to repay; `pending` covers both "no deployment
+ * record yet" and the deployer-side pending state.
+ */
+function loanStatusFor(d: DeploymentRecord | null): {
+  status: 'pending' | 'uploading' | 'deploying' | 'deployed' | 'failed' | 'repaid' | 'expired';
+  updatedAt: number | null;
+} {
+  if (!d) return { status: 'pending', updatedAt: null };
+  switch (d.status) {
+    case 'pending':
+      return { status: 'pending', updatedAt: d.updatedAt };
+    case 'deploying':
+      return { status: 'deploying', updatedAt: d.updatedAt };
+    case 'deployed':
+      return { status: 'deployed', updatedAt: d.updatedAt };
+    case 'failed':
+      return { status: 'failed', updatedAt: d.updatedAt };
+    case 'recovering':
+    case 'recovered':
+      return { status: 'expired', updatedAt: d.updatedAt };
+    default:
+      return { status: 'pending', updatedAt: d.updatedAt };
+  }
+}
 import { route } from '../route-wrapper';
 import { registry as openapi } from '../openapi';
 import type { RouteDeps } from './types';
@@ -51,6 +81,57 @@ function assertAuthMatchesBorrower(
 }
 
 export function registerLoanRoutes(app: Application, deps: RouteDeps): void {
+  // ── GET /v1/loans/:loanId/status ──────────────────────────────────────
+  // Fixes the frontend caller in src/features/solignition/data-access/
+  // step-status.tsx that was hitting /loan-status/:loanId (404 on the
+  // server). The frontend will be repointed to this URL in Step 2.4.
+  openapi.registerPath({
+    method: 'get',
+    path: '/v1/loans/{loanId}/status',
+    summary: 'Read the aggregated lifecycle status of a loan',
+    description:
+      'Returns the LoanStatus enum derived from the local deployment record. Returns {status:"pending", deployment:null} when no deployment record exists yet.',
+    tags: ['loans'],
+    security: [{ solignitionAuth: [] }],
+    request: { params: LoanIdParam },
+    responses: {
+      200: {
+        description: 'Loan status',
+        content: { 'application/json': { schema: LoanStatusResponse } },
+      },
+    },
+  });
+  app.get(
+    '/v1/loans/:loanId/status',
+    deps.rateLimit.getIp,
+    deps.authMw('GET /v1/loans/:loanId/status'),
+    deps.rateLimit.getPubkey,
+    route(
+      { params: LoanIdParam, response: LoanStatusResponse },
+      async ({ params, req }) => {
+        const deployment = await deps.stateManager.getDeployment(params.loanId);
+        if (deployment) {
+          // Authz: a signer can only see the status of their own loan.
+          // Unauth callers (off-mode) can read freely; off-mode in prod is
+          // blocked at boot (Step 3.1 follow-up).
+          assertAuthMatchesBorrower(
+            req,
+            deployment.borrower,
+            'GET /v1/loans/:loanId/status',
+            deps.logger,
+          );
+        }
+        const { status, updatedAt } = loanStatusFor(deployment);
+        return {
+          loanId: params.loanId,
+          status,
+          deployment,
+          updatedAt,
+        };
+      },
+    ),
+  );
+
   // ── POST /v1/loans ────────────────────────────────────────────────────
   openapi.registerPath({
     method: 'post',
