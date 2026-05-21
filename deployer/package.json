@@ -7,7 +7,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
-    "check-idl": "node check-idl.js"
+    "check-idl": "node check-idl.js",
+    "openapi:gen": "ts-node scripts/generate-openapi.ts",
+    "openapi:check": "ts-node scripts/generate-openapi.ts - > /tmp/openapi-new.json && diff -u openapi.json /tmp/openapi-new.json"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.3.0",
