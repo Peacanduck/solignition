@@ -112,16 +112,18 @@ export function registerDeploymentRoutes(app: Application, deps: RouteDeps): voi
           }
         }
 
-        const all = await deps.stateManager.getAllDeployments();
-        const filtered = borrower ? all.filter((d) => d.borrower === borrower) : all;
-        const sorted = filtered.sort((a, b) => b.updatedAt - a.updatedAt);
-        const page = sorted.slice(offset, offset + limit);
-        return {
-          deployments: page,
-          total: sorted.length,
+        // Storage-layer pagination (Step 3.3).
+        const page = await deps.stateManager.getDeploymentsPage({
+          borrower,
           limit,
           offset,
-          hasMore: sorted.length > offset + limit,
+        });
+        return {
+          deployments: page.deployments,
+          total: page.total,
+          limit,
+          offset,
+          hasMore: page.hasMore,
         };
       },
     ),

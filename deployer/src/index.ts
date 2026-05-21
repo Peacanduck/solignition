@@ -395,18 +395,77 @@ async getAllFileUploads(): Promise<FileUploadRecord[]> {
 
 // pagination support for large lists
 async getFileUploadsByBorrowerPaginated(
-  borrower: string, 
-  limit: number = 10, 
+  borrower: string,
+  limit: number = 10,
   offset: number = 0
 ): Promise<{ uploads: FileUploadRecord[], total: number }> {
   const allUploads = await this.getAllFileUploadsByBorrower(borrower);
   const uploads = allUploads
     .sort((a, b) => b.createdAt - a.createdAt) // Sort by newest first
     .slice(offset, offset + limit);
-  
+
   return {
     uploads,
     total: allUploads.length
+  };
+}
+
+/**
+ * Stream-iterate the upload keyspace and stop after we have enough matching
+ * records to populate one page. Bounds memory at HARD_CAP records regardless
+ * of how large the underlying DB grows -- closes the DoS path noted in the
+ * OWASP audit where a non-paginated full-DB scan ran on every list call.
+ *
+ * `total` is the count of matches *up to the cap*; when it equals HARD_CAP,
+ * the real total could be larger. `hasMore` answers the only question the
+ * frontend actually needs ("should I show a Next Page button?").
+ */
+async getFileUploadsPage(opts: {
+  borrower?: string;
+  status?: FileUploadRecord['status'];
+  limit: number;
+  offset: number;
+}): Promise<{ uploads: FileUploadRecord[]; total: number; hasMore: boolean }> {
+  const { borrower, status, limit, offset } = opts;
+  const HARD_CAP = Math.max(limit + offset + 1, 1000);
+  const matches: FileUploadRecord[] = [];
+  for await (const [key, value] of this.db.iterator()) {
+    if (!key.startsWith('upload:')) continue;
+    if (borrower && value.borrower !== borrower) continue;
+    if (status && value.status !== status) continue;
+    matches.push(value);
+    if (matches.length >= HARD_CAP) break;
+  }
+  matches.sort((a, b) => b.createdAt - a.createdAt);
+  const page = matches.slice(offset, offset + limit);
+  return {
+    uploads: page,
+    total: matches.length,
+    hasMore: matches.length > offset + limit,
+  };
+}
+
+/** Deployments equivalent of getFileUploadsPage. */
+async getDeploymentsPage(opts: {
+  borrower?: string;
+  limit: number;
+  offset: number;
+}): Promise<{ deployments: DeploymentRecord[]; total: number; hasMore: boolean }> {
+  const { borrower, limit, offset } = opts;
+  const HARD_CAP = Math.max(limit + offset + 1, 1000);
+  const matches: DeploymentRecord[] = [];
+  for await (const [key, value] of this.db.iterator()) {
+    if (!key.startsWith('deployment:')) continue;
+    if (borrower && value.borrower !== borrower) continue;
+    matches.push(value);
+    if (matches.length >= HARD_CAP) break;
+  }
+  matches.sort((a, b) => b.updatedAt - a.updatedAt);
+  const page = matches.slice(offset, offset + limit);
+  return {
+    deployments: page,
+    total: matches.length,
+    hasMore: matches.length > offset + limit,
   };
 }
 

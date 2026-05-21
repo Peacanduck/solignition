@@ -66,6 +66,19 @@ export interface StateManagerLike {
     status?: FileUploadRecord['status'],
   ): Promise<FileUploadRecord[]>;
   getAllFileUploads(): Promise<FileUploadRecord[]>;
+  /** Paginated, cap-bounded list (closes the full-DB-scan DoS noted in the audit). */
+  getFileUploadsPage(opts: {
+    borrower?: string;
+    status?: FileUploadRecord['status'];
+    limit: number;
+    offset: number;
+  }): Promise<{ uploads: FileUploadRecord[]; total: number; hasMore: boolean }>;
+  /** Paginated, cap-bounded list of deployments. */
+  getDeploymentsPage(opts: {
+    borrower?: string;
+    limit: number;
+    offset: number;
+  }): Promise<{ deployments: DeploymentRecord[]; total: number; hasMore: boolean }>;
 }
 
 export interface BinaryManagerLike {

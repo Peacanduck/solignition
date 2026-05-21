@@ -290,18 +290,20 @@ export function registerUploadRoutes(app: Application, deps: RouteDeps): void {
           }
         }
 
-        const all = borrower
-          ? await deps.stateManager.getAllFileUploadsByBorrower(borrower)
-          : await deps.stateManager.getAllFileUploads();
-        const filtered = status ? all.filter((u) => u.status === status) : all;
-        const sorted = filtered.sort((a, b) => b.createdAt - a.createdAt);
-        const page = sorted.slice(offset, offset + limit);
-        return {
-          uploads: page,
-          total: sorted.length,
+        // Storage-layer pagination (Step 3.3): bounded scan that stops
+        // after enough matches for one page, never loads the full DB.
+        const page = await deps.stateManager.getFileUploadsPage({
+          borrower,
+          status,
           limit,
           offset,
-          hasMore: sorted.length > offset + limit,
+        });
+        return {
+          uploads: page.uploads,
+          total: page.total,
+          limit,
+          offset,
+          hasMore: page.hasMore,
         };
       },
     ),
