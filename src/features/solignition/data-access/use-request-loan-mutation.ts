@@ -110,7 +110,7 @@ export function useRequestLoanMutation({ account }: { account: UiWalletAccount }
           loanId: loanId.toString(),
           fileId,
         })
-        const notifyResponse = await fetchSigned(`${DEPLOYER_API_URL}/notify-loan`, {
+        const notifyResponse = await fetchSigned(`${DEPLOYER_API_URL}/v1/loans`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

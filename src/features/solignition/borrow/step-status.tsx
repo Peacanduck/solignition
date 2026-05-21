@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
+import type { UiWalletAccount } from '@wallet-ui/react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { AppExplorerLink } from '@/components/app-explorer-link'
@@ -13,9 +14,17 @@ import {
 } from './use-borrow-wizard'
 import { useProtocolConfig } from '../data-access/use-protocol-config'
 import { formatSOL } from '../lib/format'
+import { useFetchSigned } from '@/lib/fetch-signed'
 import { StepHead } from './step-upload'
 
 const DEPLOYER_API_URL = import.meta.env.VITE_DEPLOYER_API_URL || 'http://localhost:3000'
+
+interface LoanStatusResponse {
+  loanId: string
+  status: 'pending' | 'uploading' | 'deploying' | 'deployed' | 'failed' | 'repaid' | 'expired'
+  deployment: { programId?: string; updatedAt?: number } | null
+  updatedAt: number | null
+}
 
 const STUB_TIMELINE: DeploymentEvent[] = [
   { title: 'loan created', tx: null, status: 'confirmed' },
@@ -29,10 +38,13 @@ const STUB_TIMELINE: DeploymentEvent[] = [
 export function StepStatus({
   state,
   dispatch,
+  account,
 }: {
   state: WizardState
   dispatch: React.Dispatch<WizardAction>
+  account: UiWalletAccount
 }) {
+  const fetchSigned = useFetchSigned(account)
   const configQuery = useProtocolConfig()
   const adminFeeBps = configQuery.data?.data.defaultAdminFeeBps ?? 0
   const { principal } = computePrincipal(state.estimatedRent ?? 0n, adminFeeBps)
@@ -47,14 +59,16 @@ export function StepStatus({
   const done = !!state.programId
 
   // TODO: switch to SSE/WebSocket once deployer exposes one
-  const statusQuery = useQuery<{ events?: DeploymentEvent[]; programId?: string } | null>({
+  const statusQuery = useQuery<LoanStatusResponse | null>({
     queryKey: ['deployment-status', state.loanId?.toString()],
     queryFn: async () => {
       if (!state.loanId) return null
       try {
-        const res = await fetch(`${DEPLOYER_API_URL}/loan-status/${state.loanId.toString()}`)
+        const res = await fetchSigned(
+          `${DEPLOYER_API_URL}/v1/loans/${state.loanId.toString()}/status`,
+        )
         if (!res.ok) return null
-        return (await res.json()) as { events?: DeploymentEvent[]; programId?: string }
+        return (await res.json()) as LoanStatusResponse
       } catch {
         return null
       }
@@ -63,10 +77,10 @@ export function StepStatus({
     enabled: !!state.loanId && !done,
   })
 
-  // Fall back to stubbed timer when the endpoint isn't available
+  // Fall back to stubbed timer when the endpoint hasn't progressed past 'pending'
   useEffect(() => {
     if (done) return
-    if (statusQuery.data?.events?.length) return
+    if (statusQuery.data && statusQuery.data.status !== 'pending') return
     if (state.deploymentEvents.length === 0) {
       dispatch({
         type: 'EVENTS_UPDATED',
@@ -90,13 +104,13 @@ export function StepStatus({
     return () => window.clearTimeout(id)
   }, [state.deploymentEvents.length, statusQuery.data, done, dispatch])
 
-  // When the real endpoint returns events, mirror them into wizard state
+  // When the v1 status endpoint reports a deployed programId, mirror it
+  // into wizard state. The v1 endpoint doesn't return per-step events, so
+  // the timeline keeps using the stubbed sequence above until SSE lands.
   useEffect(() => {
-    if (statusQuery.data?.events?.length) {
-      dispatch({ type: 'EVENTS_UPDATED', events: statusQuery.data.events })
-    }
-    if (statusQuery.data?.programId && !state.programId) {
-      dispatch({ type: 'PROGRAM_DEPLOYED', programId: statusQuery.data.programId })
+    const pid = statusQuery.data?.deployment?.programId
+    if (pid && !state.programId) {
+      dispatch({ type: 'PROGRAM_DEPLOYED', programId: pid })
     }
   }, [statusQuery.data, state.programId, dispatch])
 

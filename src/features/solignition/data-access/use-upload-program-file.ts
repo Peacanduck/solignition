@@ -28,7 +28,7 @@ export function useUploadProgramFile({ account }: { account: UiWalletAccount }) 
       formData.append('file', file)
       formData.append('borrower', borrower)
 
-      const response = await fetchSigned(`${DEPLOYER_API_URL}/upload`, {
+      const response = await fetchSigned(`${DEPLOYER_API_URL}/v1/uploads`, {
         method: 'POST',
         body: formData,
         fileBytes,
