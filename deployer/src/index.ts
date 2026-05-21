@@ -2365,6 +2365,15 @@ class ApiServer {
         directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
       },
       crossOriginResourcePolicy: { policy: 'same-site' },
+      // Step 3.7: pin HSTS explicitly. Helmet's defaults are close but
+      // worth fixing in the codebase: 1 year, all subdomains, preload-list
+      // eligible. The proxy in front of this service must terminate HTTPS
+      // for this header to actually be honored.
+      strictTransportSecurity: {
+        maxAge: 31536000, // 1 year in seconds
+        includeSubDomains: true,
+        preload: true,
+      },
     }));
 
     // Per-request UUID, exposed via header so clients can quote it in support tickets.
