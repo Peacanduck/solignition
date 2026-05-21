@@ -1,0 +1,39 @@
+name: Deployer dependency audit
+
+# Production-runtime dependency audit for the deployer package.
+# `--omit=dev` skips devDeps because they don't ship; `--audit-level=high`
+# fails the build on high/critical CVEs only, so low/moderate noise
+# doesn't block PRs (but is still visible in `npm audit` locally).
+#
+# Runs on PRs that touch package.json / lockfile, on push to main, and
+# weekly so newly-disclosed CVEs are surfaced even without a code change.
+
+on:
+  pull_request:
+    paths:
+      - 'deployer/package.json'
+      - 'deployer/package-lock.json'
+      - '.github/workflows/deployer-audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deployer/package.json'
+      - 'deployer/package-lock.json'
+  schedule:
+    - cron: '0 12 * * 1' # Mondays at noon UTC
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: deployer/package-lock.json
+
+      - name: npm audit (prod, high+)
+        working-directory: deployer
+        run: npm audit --omit=dev --audit-level=high
