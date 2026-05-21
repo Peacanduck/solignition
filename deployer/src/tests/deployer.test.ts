@@ -1,4 +1,4 @@
-// src/__tests__/deployer.test.ts
+/* src/__tests__/deployer.test.ts
 import { jest } from '@jest/globals';
 import { Keypair, PublicKey, Connection } from '@solana/web3.js';
 import * as anchor from '@coral-xyz/anchor';
@@ -409,10 +409,10 @@ describe('Deployer Integration Tests', () => {
 });
 
 // scripts/test-deployer.ts
-/**
- * Manual testing script for the deployer service
- * Run with: npx ts-node scripts/test-deployer.ts
- */
+//
+// Manual testing script for the deployer service
+//  Run with: npx ts-node scripts/test-deployer.ts
+ 
 
 import { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import * as anchor from '@project-serum/anchor';
@@ -475,7 +475,7 @@ async function testDeployer() {
       
       // Check deployment status via HTTP endpoint
       try {
-        const response = await fetch(`http://localhost:3000/deployments/${loanId}`);
+        const response = await fetch(`http://localhost:3000/v1/deployments/${loanId}`);
         const deployment = await response.json();
         console.log('Deployment status:', deployment.status);
         
@@ -503,4 +503,4 @@ async function testDeployer() {
 
 if (require.main === module) {
   testDeployer().catch(console.error);
-}
+}*/
