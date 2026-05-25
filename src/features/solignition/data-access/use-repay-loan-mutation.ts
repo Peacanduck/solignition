@@ -161,6 +161,11 @@ if (protocolConfigInfo) {
       await queryClient.invalidateQueries({
         queryKey: ['protocol-config', { cluster: cluster.id }],
       })
+      // Repayment returns principal + interest to the vault, so the
+      // dashboard's share-price math is stale until the next poll.
+      await queryClient.invalidateQueries({
+        queryKey: ['vault-balance', { cluster: cluster.id }],
+      })
     },
     onError: (error: Error) => {
           toast.error('Failed to repay loan', {

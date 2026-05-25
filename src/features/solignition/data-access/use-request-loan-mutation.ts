@@ -151,6 +151,12 @@ export function useRequestLoanMutation({ account }: { account: UiWalletAccount }
       await queryClient.invalidateQueries({
         queryKey: ['uploaded-programs'],
       })
+      // A new loan moves SOL out of the vault into the borrower's escrow,
+      // so the vault balance the dashboard reads for share-price math
+      // is now wrong until the next 15s poll.
+      await queryClient.invalidateQueries({
+        queryKey: ['vault-balance', { cluster: cluster.id }],
+      })
     },
     onError: (error: Error) => {
       toast.error('Failed to request loan', {
