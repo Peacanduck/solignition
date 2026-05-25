@@ -90,8 +90,21 @@ function ConnectedDashboard({ accountAddress }: { accountAddress: string }) {
   const vaultLamports = vaultQuery.data ?? 0n
   const totalShares = configQuery.data?.data.totalShares ?? 0n
 
+  // Share price MUST match the on-chain formula in
+  // anchor/programs/solignition/src/instructions/withdraw.rs (process_withdraw):
+  //   total_assets = vault_balance + total_loans_outstanding
+  //   share_price  = total_assets / total_shares
+  //
+  // Using vault alone (the old behavior) made the dashboard's "earnings"
+  // dip negative while a loan was outstanding -- principal had moved out
+  // of the vault, but loans_outstanding wasn't being credited back.
+  const totalLoansOutstandingLamports =
+    configQuery.data?.data.totalLoansOutstanding ?? 0n
   const sharePrice =
-    totalShares > 0n ? Number(vaultLamports) / Number(totalShares) : 1
+    totalShares > 0n
+      ? (Number(vaultLamports) + Number(totalLoansOutstandingLamports)) /
+        Number(totalShares)
+      : 1
   const principalSol = Number(depositedLamports) / 1e9
   const currentValueSol = (Number(shareAmount) * sharePrice) / 1e9
   const earnedSol = currentValueSol - principalSol

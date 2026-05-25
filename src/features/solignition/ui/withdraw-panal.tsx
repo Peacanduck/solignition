@@ -11,8 +11,13 @@ interface EnhancedWithdrawPanelProps {
   depositedAmount: bigint;
   shareAmount: bigint;
   totalShares: bigint;
-  totalDeposits: bigint;
-  totalYieldDistributed: bigint;
+  /**
+   * Kept on the props for parent-caller stability (and for potential
+   * "lifetime deposited" display) but no longer used in share-price math --
+   * see calculateSharePrice for the on-chain-matching formula.
+   */
+  totalDeposits?: bigint;
+  totalYieldDistributed?: bigint;
   totalLoansOutstanding: bigint;
   vaultBalance: bigint;
   onWithdraw: (amount: bigint) => Promise<void>;
@@ -25,22 +30,30 @@ export function EnhancedWithdrawPanel({
   depositedAmount,
   shareAmount,
   totalShares,
-  totalDeposits,
-  totalYieldDistributed,
   totalLoansOutstanding,
   vaultBalance,
   onWithdraw,
   onClaimYield,
   isPending,
-  isClaimPending
+  isClaimPending,
 }: EnhancedWithdrawPanelProps) {
   const [customAmount, setCustomAmount] = useState('');
   const [withdrawType, setWithdrawType] = useState<'interest' | 'custom'>('interest');
 
-  // Calculate share price
+  // Calculate share price.
+  //
+  // MUST match the on-chain formula in
+  // anchor/programs/solignition/src/instructions/withdraw.rs (process_withdraw):
+  //   total_assets = vault_balance + total_loans_outstanding
+  //   share_price  = total_assets * SHARE_DECIMALS / total_shares
+  //
+  // The earlier version used (totalDeposits + totalYieldDistributed) which
+  // ignored outstanding loan principal -- so a deposit made while loans
+  // were outstanding displayed as a paper loss even though withdraw
+  // returned the full amount.
   const calculateSharePrice = () => {
     if (totalShares === 0n) return 1_000_000_000n;
-    const totalAssets = totalDeposits + totalYieldDistributed;
+    const totalAssets = vaultBalance + totalLoansOutstanding;
     return (totalAssets * 1_000_000_000n) / totalShares;
   };
 

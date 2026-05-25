@@ -6,8 +6,12 @@ interface DepositorStatsProps {
   depositedAmount: bigint;
   shareAmount: bigint;
   totalShares: bigint;
+  /** Total ever deposited (lifetime). Used only for the APY estimate, not for share-price math. */
   totalDeposits: bigint;
   totalYieldDistributed: bigint;
+  /** Required for the share-price formula — see calculateSharePrice. */
+  vaultBalance: bigint;
+  totalLoansOutstanding: bigint;
 }
 
 export function DepositorStatsDisplay({
@@ -15,16 +19,27 @@ export function DepositorStatsDisplay({
   shareAmount,
   totalShares,
   totalDeposits,
-  totalYieldDistributed
+  totalYieldDistributed,
+  vaultBalance,
+  totalLoansOutstanding,
 }: DepositorStatsProps) {
-  
-  // Calculate share price (matches contract logic)
+
+  // Calculate share price.
+  //
+  // MUST match the on-chain formula in
+  // anchor/programs/solignition/src/instructions/withdraw.rs (process_withdraw):
+  //   total_assets = vault_balance + total_loans_outstanding
+  //   share_price  = total_assets * SHARE_DECIMALS / total_shares
+  //
+  // The earlier version used (totalDeposits + totalYieldDistributed) which
+  // ignored outstanding loan principal -- so a deposit made while loans
+  // were outstanding displayed as a paper loss even though withdraw
+  // returned the full amount.
   const calculateSharePrice = () => {
     if (totalShares === 0n) {
       return 1_000_000_000n; // 1:1 ratio with 9 decimals
     }
-    
-    const totalAssets = totalDeposits + totalYieldDistributed;
+    const totalAssets = vaultBalance + totalLoansOutstanding;
     return (totalAssets * 1_000_000_000n) / totalShares;
   };
 
