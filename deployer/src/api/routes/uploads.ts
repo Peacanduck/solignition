@@ -17,6 +17,8 @@ import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
 import { httpError } from '../error-handler';
+import { z } from 'zod';
+
 import {
   CreateUploadFormFields,
   CreateUploadResponse,
@@ -28,6 +30,16 @@ import {
 import { route } from '../route-wrapper';
 import { registry as openapi } from '../openapi';
 import type { FileUploadRecord, RouteDeps } from './types';
+
+// OpenAPI multipart description: zod-to-openapi requires real Zod schemas
+// inside .extend(), so we model the file as a string with the `binary`
+// format override -- that's the conventional way to express an uploaded
+// file in OpenAPI 3.x.
+const CreateUploadMultipart = CreateUploadFormFields.extend({
+  file: z
+    .string()
+    .openapi({ type: 'string', format: 'binary', description: 'The .so program binary' }),
+});
 
 function assertAuthMatches(
   req: Request,
@@ -62,11 +74,7 @@ export function registerUploadRoutes(app: Application, deps: RouteDeps): void {
     request: {
       body: {
         content: {
-          'multipart/form-data': {
-            schema: CreateUploadFormFields.extend({
-              file: { type: 'string', format: 'binary' } as unknown as never,
-            }),
-          },
+          'multipart/form-data': { schema: CreateUploadMultipart },
         },
       },
     },
