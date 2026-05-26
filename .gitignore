@@ -33,6 +33,7 @@ dist-ssr
 /anchor/target/deploy
 /anchor/target/release
 /anchor/target/sbf-solana-solana
+/anchor/target/sbpf-solana-solana
 /anchor/target/test-ledger
 /anchor/target/.rustc_info.json
 /anchor/.surfpool
@@ -48,6 +49,9 @@ test-ledger
 /landing/node_modules
 
 #claude
+.claude/
 src/.claude/
 docs/.claude/
 landing/src/.claude/
+
+solignition-cli/
