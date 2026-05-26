@@ -2,7 +2,7 @@
   "name": "solignition",
   "workspaces": [
     "anchor/*",
-    "deploy/*",
+    "deployer/*",
     "src/*",
     "landing/*",
     "docs/*"
@@ -11,11 +11,16 @@
     "anchor": "cd anchor && anchor",
     "anchor-build": "cd anchor && anchor build",
     "anchor-localnet": "cd anchor && anchor localnet",
-    "anchor-test": "cd anchor && anchor test",
+    "anchor-test": "cd anchor && anchor run test",
+    "surfpool": "cd anchor && surfpool start",
+    "backend": "cd deployer && npm run dev",
+    "frontend": "vite",
     "build": "tsc -b && vite build",
     "codama:js": "codama run js -c ./anchor/codama.js",
     "ci": "npm run build && npm run lint && npm run format:check && npm run codama:js",
-    "dev": "vite",
+    "dev": "concurrently -k -n SURFPOOL,BACKEND,FRONTEND -c blue,green,yellow \"npm run surfpool -- --no-tui\" \"npm run backend\" \"npm run frontend\"",
+    "test:full": "concurrently -k -n SURFPOOL,ANCHOR_TEST -c blue,magenta \"npm run surfpool\" \"wait-on tcp:8899 && npm run anchor-test\"",
+    "dev:all": "concurrently -k -n SURFPOOL,BACKEND,FRONTEND -c blue,green,yellow \"npm run surfpool\" \"npm run backend\" \"npm run frontend\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
@@ -82,6 +87,7 @@
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.3",
     "chai": "^6.2.0",
+    "concurrently": "^9.2.1",
     "eslint": "^9.35.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
@@ -93,6 +99,7 @@
     "vite": "^7.1.6",
     "vite-plugin-node-polyfills": "^0.24.0",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wait-on": "^9.0.10"
   }
 }

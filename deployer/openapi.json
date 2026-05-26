@@ -1,0 +1,1041 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Solignition Deployer API",
+    "version": "1.0.0",
+    "description": "Off-chain deployer service for the Solignition Solana lending protocol. Authenticated with the solignition-auth-v1 wallet-signature scheme — see deployer/src/auth.ts."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "solignitionAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Auth-Pubkey",
+        "description": "solignition-auth-v1: send X-Auth-Pubkey, X-Auth-Timestamp, X-Auth-Nonce, X-Auth-Signature. See deployer/src/auth.ts for the canonical message format."
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "JobAcceptedResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "jobId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "jobId"
+        ]
+      },
+      "DeploymentRecord": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "loanId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^\\d+$",
+            "description": "On-chain loan id (u64 as string)",
+            "example": "42"
+          },
+          "borrower": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 44,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana base58 pubkey",
+            "example": "11111111111111111111111111111111"
+          },
+          "programId": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 44,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana base58 pubkey",
+            "example": "11111111111111111111111111111111"
+          },
+          "deploymentCost": {
+            "type": "number"
+          },
+          "deployTxSignature": {
+            "type": "string",
+            "minLength": 80,
+            "maxLength": 95,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana transaction signature (base58)",
+            "example": "5j7s..."
+          },
+          "setDeployedTxSignature": {
+            "type": "string",
+            "minLength": 80,
+            "maxLength": 95,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana transaction signature (base58)",
+            "example": "5j7s..."
+          },
+          "recoveryTxSignature": {
+            "type": "string",
+            "minLength": 80,
+            "maxLength": 95,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana transaction signature (base58)",
+            "example": "5j7s..."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "deploying",
+              "deployed",
+              "recovering",
+              "recovered",
+              "failed"
+            ]
+          },
+          "error": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          },
+          "binaryHash": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "binaryPath": {
+            "type": "string"
+          },
+          "principal": {
+            "type": "string"
+          },
+          "programAccountOpen": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "loanId",
+          "borrower",
+          "status",
+          "createdAt",
+          "updatedAt",
+          "principal",
+          "programAccountOpen"
+        ]
+      },
+      "LoanStatusResponse": {
+        "type": "object",
+        "properties": {
+          "loanId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^\\d+$",
+            "description": "On-chain loan id (u64 as string)",
+            "example": "42"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "uploading",
+              "deploying",
+              "deployed",
+              "failed",
+              "repaid",
+              "expired"
+            ]
+          },
+          "deployment": {
+            "$ref": "#/components/schemas/DeploymentRecord"
+          },
+          "updatedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "loanId",
+          "status",
+          "deployment",
+          "updatedAt"
+        ]
+      },
+      "CreateLoanResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "signature": {
+            "type": "string",
+            "minLength": 80,
+            "maxLength": 95,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana transaction signature (base58)",
+            "example": "5j7s..."
+          },
+          "fileId": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 16,
+            "pattern": "^[a-f0-9]{16}$",
+            "example": "0a1b2c3d4e5f6789"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "signature",
+          "fileId"
+        ]
+      },
+      "CreateLoanBody": {
+        "type": "object",
+        "properties": {
+          "signature": {
+            "type": "string",
+            "minLength": 80,
+            "maxLength": 95,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana transaction signature (base58)",
+            "example": "5j7s..."
+          },
+          "borrower": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 44,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana base58 pubkey",
+            "example": "11111111111111111111111111111111"
+          },
+          "loanId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^\\d+$",
+            "description": "On-chain loan id (u64 as string)",
+            "example": "42"
+          },
+          "fileId": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 16,
+            "pattern": "^[a-f0-9]{16}$",
+            "example": "0a1b2c3d4e5f6789"
+          }
+        },
+        "required": [
+          "signature",
+          "borrower",
+          "loanId",
+          "fileId"
+        ]
+      },
+      "CreateRepaymentResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "loanId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^\\d+$",
+            "description": "On-chain loan id (u64 as string)",
+            "example": "42"
+          },
+          "auth": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 44,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana base58 pubkey",
+            "example": "11111111111111111111111111111111"
+          },
+          "tx": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "loanId",
+          "auth"
+        ]
+      },
+      "CreateRepaymentBody": {
+        "type": "object",
+        "properties": {
+          "signature": {
+            "type": "string",
+            "minLength": 80,
+            "maxLength": 95,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana transaction signature (base58)",
+            "example": "5j7s..."
+          },
+          "borrower": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 44,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana base58 pubkey",
+            "example": "11111111111111111111111111111111"
+          }
+        },
+        "required": [
+          "signature",
+          "borrower"
+        ]
+      },
+      "CreateUploadResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "fileId": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 16,
+            "pattern": "^[a-f0-9]{16}$",
+            "example": "0a1b2c3d4e5f6789"
+          },
+          "estimatedCost": {
+            "type": "number"
+          },
+          "binaryHash": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "fileId",
+          "estimatedCost",
+          "binaryHash",
+          "message"
+        ]
+      },
+      "CreateUploadFormFields": {
+        "type": "object",
+        "properties": {
+          "borrower": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 44,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana base58 pubkey",
+            "example": "11111111111111111111111111111111"
+          },
+          "expectedHash": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "sha256(file) computed by the client. If provided, the server rejects with 422 when the computed hash does not match."
+          }
+        },
+        "required": [
+          "borrower"
+        ]
+      },
+      "FileUploadRecord": {
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 16,
+            "pattern": "^[a-f0-9]{16}$",
+            "example": "0a1b2c3d4e5f6789"
+          },
+          "borrower": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 44,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana base58 pubkey",
+            "example": "11111111111111111111111111111111"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "fileSize": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "binaryHash": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "estimatedCost": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ready",
+              "deployed"
+            ]
+          },
+          "createdAt": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fileId",
+          "borrower",
+          "fileName",
+          "filePath",
+          "fileSize",
+          "binaryHash",
+          "estimatedCost",
+          "status",
+          "createdAt"
+        ]
+      },
+      "PaginatedUploads": {
+        "type": "object",
+        "properties": {
+          "uploads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileUploadRecord"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "uploads",
+          "total",
+          "limit",
+          "offset",
+          "hasMore"
+        ]
+      },
+      "PaginatedDeployments": {
+        "type": "object",
+        "properties": {
+          "deployments": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/DeploymentRecord"
+                },
+                {
+                  "type": "object"
+                }
+              ]
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deployments",
+          "total",
+          "limit",
+          "offset",
+          "hasMore"
+        ]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Liveness probe",
+        "tags": [
+          "ops"
+        ],
+        "responses": {
+          "200": {
+            "description": "Service is up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Prometheus metrics",
+        "tags": [
+          "ops"
+        ],
+        "responses": {
+          "200": {
+            "description": "Prometheus text format"
+          }
+        }
+      }
+    },
+    "/v1/jobs/expired-loan-check": {
+      "post": {
+        "summary": "Trigger an expired-loan recovery sweep",
+        "description": "Kicks off the same sweep the cron job runs. Returns 202 immediately; check logs / metrics for completion.",
+        "tags": [
+          "jobs"
+        ],
+        "security": [
+          {
+            "solignitionAuth": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Job accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAcceptedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/loans/{loanId}/status": {
+      "get": {
+        "summary": "Read the aggregated lifecycle status of a loan",
+        "description": "Returns the LoanStatus enum derived from the local deployment record. Returns {status:\"pending\", deployment:null} when no deployment record exists yet.",
+        "tags": [
+          "loans"
+        ],
+        "security": [
+          {
+            "solignitionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20,
+              "pattern": "^\\d+$",
+              "description": "On-chain loan id (u64 as string)",
+              "example": "42"
+            },
+            "required": true,
+            "name": "loanId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Loan status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoanStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/loans": {
+      "post": {
+        "summary": "Record a new loan-request event",
+        "description": "Called by the borrower after they signed a `request_loan` transaction on-chain. The deployer verifies the signature on-chain in the background, then kicks off deployment.",
+        "tags": [
+          "loans"
+        ],
+        "security": [
+          {
+            "solignitionAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLoanBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Loan event recorded; deployment will begin asynchronously",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateLoanResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/loans/{loanId}/repayments": {
+      "post": {
+        "summary": "Record a loan-repayment event",
+        "description": "Called by the borrower after they signed `repay_loan`. The deployer transfers the deployed program authority back to the borrower.",
+        "tags": [
+          "loans"
+        ],
+        "security": [
+          {
+            "solignitionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20,
+              "pattern": "^\\d+$",
+              "description": "On-chain loan id (u64 as string)",
+              "example": "42"
+            },
+            "required": true,
+            "name": "loanId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRepaymentBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Repayment recorded; authority transfer scheduled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateRepaymentResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/uploads": {
+      "post": {
+        "summary": "Upload a Solana program binary (.so)",
+        "description": "Multipart: file=<.so>, borrower=<pubkey>, optional expectedHash=<sha256 hex>. Returns 201 with the new fileId and Location header.",
+        "tags": [
+          "uploads"
+        ],
+        "security": [
+          {
+            "solignitionAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateUploadFormFields"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "file": {
+                        "type": "string",
+                        "description": "The .so program binary",
+                        "format": "binary"
+                      }
+                    },
+                    "required": [
+                      "file"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Upload created",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "URL of the new upload resource"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateUploadResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List uploads (paginated)",
+        "description": "Filter by borrower and/or status. Default limit 50, max 200. Authenticated callers may only list their own uploads.",
+        "tags": [
+          "uploads"
+        ],
+        "security": [
+          {
+            "solignitionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 44,
+              "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+              "description": "Solana base58 pubkey",
+              "example": "11111111111111111111111111111111"
+            },
+            "required": false,
+            "name": "borrower",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "ready",
+                "deployed"
+              ]
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of uploads",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedUploads"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/uploads/{fileId}": {
+      "get": {
+        "summary": "Get an upload by fileId",
+        "tags": [
+          "uploads"
+        ],
+        "security": [
+          {
+            "solignitionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 16,
+              "pattern": "^[a-f0-9]{16}$",
+              "example": "0a1b2c3d4e5f6789"
+            },
+            "required": true,
+            "name": "fileId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upload record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileUploadRecord"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete an upload (only while not yet deployed)",
+        "tags": [
+          "uploads"
+        ],
+        "security": [
+          {
+            "solignitionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 16,
+              "pattern": "^[a-f0-9]{16}$",
+              "example": "0a1b2c3d4e5f6789"
+            },
+            "required": true,
+            "name": "fileId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/v1/deployments/{loanId}": {
+      "get": {
+        "summary": "Get a deployment by loanId",
+        "tags": [
+          "deployments"
+        ],
+        "security": [
+          {
+            "solignitionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20,
+              "pattern": "^\\d+$",
+              "description": "On-chain loan id (u64 as string)",
+              "example": "42"
+            },
+            "required": true,
+            "name": "loanId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deployment record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/DeploymentRecord"
+                    },
+                    {
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments": {
+      "get": {
+        "summary": "List deployments (paginated)",
+        "description": "Filter by borrower. Default limit 50, max 200. Authenticated callers may only list their own deployments.",
+        "tags": [
+          "deployments"
+        ],
+        "security": [
+          {
+            "solignitionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 44,
+              "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+              "description": "Solana base58 pubkey",
+              "example": "11111111111111111111111111111111"
+            },
+            "required": false,
+            "name": "borrower",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of deployments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedDeployments"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {}
+}

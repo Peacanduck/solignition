@@ -22,19 +22,24 @@ import { Registry, Gauge, Counter, Histogram } from 'prom-client';
 import * as dotenv from 'dotenv';
 import { Level } from 'level';
 import { GraphQLClient, gql } from 'graphql-request';
-import { exec, spawn } from 'child_process';
-import { promisify } from 'util';
+import { spawn } from 'child_process';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import { v4 as uuidv4 } from 'uuid';
 import { LRUCache } from 'lru-cache';
 import { Solignition } from '../../anchor/target/types/solignition';
 import { error, log } from 'console';
-import { captureRawBody, parseAuthMode, requireAuth, type AuthMode } from './auth';
+import { captureRawBody, parseAuthMode, type AuthMode } from './auth';
 import { loadKeypair } from './keypairLoader';
-
-const execAsync = promisify(exec);
+import { buildAuthMw, buildRateLimiters } from './api/middleware';
+import { errorHandler } from './api/error-handler';
+import { mountOpenApi } from './api/openapi';
+import { registerHealthRoutes } from './api/routes/health';
+import { registerJobRoutes } from './api/routes/jobs';
+import { registerLoanRoutes } from './api/routes/loans';
+import { registerUploadRoutes } from './api/routes/uploads';
+import { registerDeploymentRoutes } from './api/routes/deployments';
+import type { RouteDeps } from './api/routes/types';
 
 // Load environment variables
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -113,83 +118,10 @@ const verifiedSignatureCache = new LRUCache<string, boolean>({
   ttl: 10 * 60 * 1000,
 });
 
-// ============ Rate limiters ============
-// Two layers run concurrently on authed routes — request is blocked if either
-// trips. Per-IP is the DoS defence; per-pubkey is the abuse defence.
-
-const ipKey = (req: express.Request) => req.ip || 'unknown';
-const pubkeyKey = (req: express.Request) => req.authPubkey || `ip:${req.ip || 'unknown'}`;
-
-const rateLimitMessage = (code: string, label: string) => ({
-  error: `Rate limit exceeded (${label})`,
-  code,
-});
-
-const uploadIpLimit = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1h
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: ipKey,
-  message: rateLimitMessage('rate_limit_ip', '/upload per IP'),
-});
-const uploadPubkeyLimit = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: pubkeyKey,
-  message: rateLimitMessage('rate_limit_pubkey', '/upload per pubkey (hour)'),
-});
-const uploadPubkeyDailyLimit = rateLimit({
-  windowMs: 24 * 60 * 60 * 1000,
-  max: 50,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: pubkeyKey,
-  message: rateLimitMessage('rate_limit_pubkey_daily', '/upload per pubkey (day)'),
-});
-
-const notifyIpLimit = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: ipKey,
-  message: rateLimitMessage('rate_limit_ip', '/notify-* per IP'),
-});
-const notifyPubkeyLimit = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 60,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: pubkeyKey,
-  message: rateLimitMessage('rate_limit_pubkey', '/notify-* per pubkey'),
-});
-
-const getIpLimit = rateLimit({
-  windowMs: 60 * 1000,
-  max: 60,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: ipKey,
-  message: rateLimitMessage('rate_limit_ip', 'GET per IP'),
-});
-const getPubkeyLimit = rateLimit({
-  windowMs: 60 * 1000,
-  max: 300,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: pubkeyKey,
-  message: rateLimitMessage('rate_limit_pubkey', 'GET per pubkey'),
-});
-
-/** Factory: build the requireAuth middleware wired with logger + metrics. */
-function authMw() {
-  return requireAuth(config.authMode, logger, (code) =>
-    metrics.authFailures.inc({ code }),
-  );
-}
+// ============ Rate limiters & auth middleware factory ============
+// Built lazily inside ApiServer so they read `config.authMode` / `logger` /
+// `metrics` at construction time (those are still defined below in this
+// file). The per-IP and per-pubkey layers are documented in api/middleware.ts.
 
 // ============ Cached keypair loaders ============
 let deployerKeypairCache: Keypair | null = null;
@@ -362,7 +294,9 @@ validationRejected: new Counter({
 authFailures: new Counter({
   name: 'deployer_http_auth_failures_total',
   help: 'Auth failures (wallet-signature verification)',
-  labelNames: ['code'],
+  // `endpoint` label added so we can spot per-route attack patterns
+  // (Step 3.8 of the v1 REST hardening plan).
+  labelNames: ['code', 'endpoint'],
   registers: [registry],
 }),
 };
@@ -458,18 +392,77 @@ async getAllFileUploads(): Promise<FileUploadRecord[]> {
 
 // pagination support for large lists
 async getFileUploadsByBorrowerPaginated(
-  borrower: string, 
-  limit: number = 10, 
+  borrower: string,
+  limit: number = 10,
   offset: number = 0
 ): Promise<{ uploads: FileUploadRecord[], total: number }> {
   const allUploads = await this.getAllFileUploadsByBorrower(borrower);
   const uploads = allUploads
     .sort((a, b) => b.createdAt - a.createdAt) // Sort by newest first
     .slice(offset, offset + limit);
-  
+
   return {
     uploads,
     total: allUploads.length
+  };
+}
+
+/**
+ * Stream-iterate the upload keyspace and stop after we have enough matching
+ * records to populate one page. Bounds memory at HARD_CAP records regardless
+ * of how large the underlying DB grows -- closes the DoS path noted in the
+ * OWASP audit where a non-paginated full-DB scan ran on every list call.
+ *
+ * `total` is the count of matches *up to the cap*; when it equals HARD_CAP,
+ * the real total could be larger. `hasMore` answers the only question the
+ * frontend actually needs ("should I show a Next Page button?").
+ */
+async getFileUploadsPage(opts: {
+  borrower?: string;
+  status?: FileUploadRecord['status'];
+  limit: number;
+  offset: number;
+}): Promise<{ uploads: FileUploadRecord[]; total: number; hasMore: boolean }> {
+  const { borrower, status, limit, offset } = opts;
+  const HARD_CAP = Math.max(limit + offset + 1, 1000);
+  const matches: FileUploadRecord[] = [];
+  for await (const [key, value] of this.db.iterator()) {
+    if (!key.startsWith('upload:')) continue;
+    if (borrower && value.borrower !== borrower) continue;
+    if (status && value.status !== status) continue;
+    matches.push(value);
+    if (matches.length >= HARD_CAP) break;
+  }
+  matches.sort((a, b) => b.createdAt - a.createdAt);
+  const page = matches.slice(offset, offset + limit);
+  return {
+    uploads: page,
+    total: matches.length,
+    hasMore: matches.length > offset + limit,
+  };
+}
+
+/** Deployments equivalent of getFileUploadsPage. */
+async getDeploymentsPage(opts: {
+  borrower?: string;
+  limit: number;
+  offset: number;
+}): Promise<{ deployments: DeploymentRecord[]; total: number; hasMore: boolean }> {
+  const { borrower, limit, offset } = opts;
+  const HARD_CAP = Math.max(limit + offset + 1, 1000);
+  const matches: DeploymentRecord[] = [];
+  for await (const [key, value] of this.db.iterator()) {
+    if (!key.startsWith('deployment:')) continue;
+    if (borrower && value.borrower !== borrower) continue;
+    matches.push(value);
+    if (matches.length >= HARD_CAP) break;
+  }
+  matches.sort((a, b) => b.updatedAt - a.updatedAt);
+  const page = matches.slice(offset, offset + limit);
+  return {
+    deployments: page,
+    total: matches.length,
+    hasMore: matches.length > offset + limit,
   };
 }
 
@@ -622,6 +615,42 @@ class BinaryManager {
 }
 
 // ============ Solana CLI Deployer ============
+/**
+ * Spawn a child process with an explicit arg array -- never a shell-
+ * interpreted string. Step 3.6 of the OWASP hardening plan: replaces
+ * exec(`solana program deploy ${binaryPath} ...`) which would be shell-
+ * injectable if any of the interpolated values ever became attacker-
+ * controlled. Inputs today are server-controlled (uuid temp paths, env-
+ * configured CLI/RPC URLs, fs.stat() sizes), but `spawn` removes the
+ * shell entirely so future additions can't accidentally regress.
+ */
+function runCliCapture(
+  command: string,
+  args: string[],
+  opts: { input?: string } = {},
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { shell: false });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString('utf8');
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf8');
+    });
+    child.on('error', (err) => reject(err));
+    child.on('close', (exitCode) => {
+      resolve({ stdout, stderr, exitCode: exitCode ?? -1 });
+    });
+    if (opts.input) {
+      child.stdin.end(opts.input);
+    } else {
+      child.stdin.end();
+    }
+  });
+}
+
 class SolanaCliDeployer {
   private connection: Connection;
   private deployerKeypairPath: string;
@@ -644,23 +673,26 @@ class SolanaCliDeployer {
       const programKeypairPath = `/tmp/program-${programKeypair.publicKey.toBase58()}.json`;
       await fs.writeFile(programKeypairPath, JSON.stringify(Array.from(programKeypair.secretKey)));
 
-      // Build the deploy command
-      const deployCommand = `${config.solanaCliPath || 'solana'} program deploy ${binaryPath} \
-        --program-id ${programKeypairPath} \
-        --keypair ${this.deployerKeypairPath} \
-        --url ${config.rpcUrl} \
-        --commitment confirmed`;
+      // Build the deploy command. Arg array, no shell -- see runCliCapture.
+      const solanaBin = config.solanaCliPath || 'solana';
+      const deployArgs = [
+        'program',
+        'deploy',
+        binaryPath,
+        '--program-id', programKeypairPath,
+        '--keypair', this.deployerKeypairPath,
+        '--url', config.rpcUrl,
+        '--commitment', 'confirmed',
+      ];
 
-      logger.info('Executing deploy command', { command: deployCommand });
+      logger.info('Executing deploy command', { command: solanaBin, args: deployArgs });
 
-      // Execute the deployment
-      const { stdout, stderr } = await execAsync(deployCommand);
+      const { stdout, stderr, exitCode } = await runCliCapture(solanaBin, deployArgs);
 
-      console.log('deploy command output:', stdout);
-      console.log('deploy command error output:', stderr);
-      
-      if (stderr && !stderr.includes('Program Id:')) {
-        throw new Error(`Deployment error: ${stderr}`);
+      logger.debug('deploy.cli_output', { stdout, stderr, exitCode });
+
+      if (exitCode !== 0 || (stderr && !stderr.includes('Program Id:'))) {
+        throw new Error(`Deployment error (exit ${exitCode}): ${stderr || stdout}`);
       }
 
       // Parse the program ID from output
@@ -699,17 +731,21 @@ class SolanaCliDeployer {
     try {
       logger.info('Closing program using Solana CLI', { programId });
 
-      const closeCommand = `${config.solanaCliPath || 'solana'} program close ${programId} \
-        --keypair ${this.deployerKeypairPath} \
-        --url ${config.rpcUrl} \
-        --bypass-warning \
-        --commitment confirmed`;
+      const solanaBin = config.solanaCliPath || 'solana';
+      const closeArgs = [
+        'program',
+        'close',
+        programId,
+        '--keypair', this.deployerKeypairPath,
+        '--url', config.rpcUrl,
+        '--bypass-warning',
+        '--commitment', 'confirmed',
+      ];
 
-      const { stdout, stderr } = await execAsync(closeCommand);
-      console.log('close command output:', stdout);
-      console.log('close command error output:', stderr);
-      if (stderr && !stderr.includes('closed')) {
-        throw new Error(`Close error: ${stderr}`);
+      const { stdout, stderr, exitCode } = await runCliCapture(solanaBin, closeArgs);
+      logger.debug('close.cli_output', { stdout, stderr, exitCode });
+      if (exitCode !== 0 || (stderr && !stderr.includes('closed'))) {
+        throw new Error(`Close error (exit ${exitCode}): ${stderr || stdout}`);
       }
 
       // Parse signature from output if available
@@ -746,18 +782,16 @@ class SolanaCliDeployer {
     }
     
     logger.info('Estimating rent for file', { sizeInBytes });
-    
-    // Build the rent command
-    const rentCommand = `${config.solanaCliPath || 'solana'} rent ${sizeInBytes} \
-      --url ${config.rpcUrl}`;
-    
-    logger.info('Executing rent command', { command: rentCommand });
-    
-    // Execute the rent estimation
-    const { stdout, stderr } = await execAsync(rentCommand);
-    
-    if (stderr) {
-      throw new Error(`Rent estimation error: ${stderr}`);
+
+    const solanaBin = config.solanaCliPath || 'solana';
+    const rentArgs = ['rent', String(sizeInBytes), '--url', config.rpcUrl];
+
+    logger.info('Executing rent command', { command: solanaBin, args: rentArgs });
+
+    const { stdout, stderr, exitCode } = await runCliCapture(solanaBin, rentArgs);
+
+    if (exitCode !== 0 || stderr) {
+      throw new Error(`Rent estimation error (exit ${exitCode}): ${stderr || stdout}`);
     }
     
     // Parse the rent amount from output
@@ -2331,6 +2365,15 @@ class ApiServer {
         directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
       },
       crossOriginResourcePolicy: { policy: 'same-site' },
+      // Step 3.7: pin HSTS explicitly. Helmet's defaults are close but
+      // worth fixing in the codebase: 1 year, all subdomains, preload-list
+      // eligible. The proxy in front of this service must terminate HTTPS
+      // for this header to actually be honored.
+      strictTransportSecurity: {
+        maxAge: 31536000, // 1 year in seconds
+        includeSubDomains: true,
+        preload: true,
+      },
     }));
 
     // Per-request UUID, exposed via header so clients can quote it in support tickets.
@@ -2403,547 +2446,49 @@ class ApiServer {
   }
   
   private setupRoutes(): void {
-    // Health check
-    this.app.get('/health', async (req, res) => {
-      try {
-        const deployments = await this.stateManager.getAllDeployments();
-        const activeCount = deployments.filter(d => d.status === 'deployed').length;
-        
-        res.json({
-          status: 'healthy',
-          activeLoans: activeCount,
-          totalDeployments: deployments.length,
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        res.status(500).json({ status: 'unhealthy', error: String(error) });
-      }
-    });
+    const rateLimit = buildRateLimiters();
+    const authMw = buildAuthMw(config.authMode, logger, (code, endpoint) =>
+      metrics.authFailures.inc({ code, endpoint }),
+    );
 
-    // Metrics endpoint
-    this.app.get('/metrics', async (req, res) => {
-      res.set('Content-Type', registry.contentType);
-      res.end(await registry.metrics());
-    });
-
-    this.app.post('/check-expired-loans', async (req, res) => {
-  try {
-    if (!this.orchestrator) {
-      return res.status(500).json({ error: 'Orchestrator not initialized' });
-    }
-    
-    logger.info('Manual expired loan check triggered via API');
-    
-    // Run the check asynchronously
-    this.orchestrator.checkExpiredLoans()
-      .then(() => logger.info('Manual expired loan check completed'))
-      .catch(error => logger.error('Manual expired loan check failed', { error }));
-    
-    res.json({
-      success: true,
-      message: 'Expired loan check initiated with full recovery flow',
-    });
-  } catch (error) {
-    logger.error('Error triggering expired loan check', { error });
-    res.status(500).json({ 
-      error: error instanceof Error ? error.message : 'Internal server error' 
-    });
-  }
-    });
-
-    this.app.post(
-      '/notify-repaid',
-      notifyIpLimit,
-      authMw(),
-      notifyPubkeyLimit,
-      async (req, res) => {
-      try {
-        const { signature, borrower, loanId } = req.body;
-
-        if (!loanId || !borrower) {
-          logger.warn('Notify loan request missing required fields', { signature, borrower });
-          return res.status(400).json({
-            error: 'Transaction signature and borrower address required'
-          });
-        }
-
-        if (config.authMode !== 'off' && req.authPubkey && req.authPubkey !== borrower) {
-          logger.warn('notify-repaid.authz_mismatch', {
-            authPubkey: req.authPubkey,
-            borrower,
-            reqId: req.id,
-          });
-          return res.status(403).json({
-            error: 'Authenticated pubkey does not match `borrower` field',
-            code: 'authz_mismatch',
-          });
-        }
-
-        logger.info('Received repaid notification', {
-          signature,
-          borrower,
-          loanId: loanId || 'unknown',
-          reqId: req.id,
-        });
-
-        let tx;
-        // Give the transaction a moment to be confirmed
-       setTimeout(async () => {
-          try {
-          //  const connection = new Connection(config.rpcUrl, 'confirmed');
-          if (!this.orchestrator) {
-          logger.error('No orchestrator reference available');
-          return;
-          }
-          
-          // Trigger transfer through orchestrator
-          const borrowerPubkey = new PublicKey(borrower);
-          tx = await (this.orchestrator as any).transferDeployedProgramAuth(loanId, borrowerPubkey);
-           logger.info('Auth transfer completed', { loanId, borrower, tx });
-
-          // Respond after transaction
-          res.json({
-            success: true,
-            message: 'Auth transfer completed',
-            tx,
-            loanId,
-            auth: borrower,
-          });
-
-          } catch (error) {
-            logger.error('Error transferring program auth', { 
-             borrower,
-             loanId,
-             errorMessage: error instanceof Error ? error.message : String(error),
-             errorStack: error instanceof Error ? error.stack : undefined,
-             errorName: error instanceof Error ? error.name : undefined
-            });
-          }
-        }, 20000); // Wait 2 seconds for confirmation
-
-      } catch (error) {
-        logger.error('Error handling repaid notification', { 
-            errorMessage: error instanceof Error ? error.message : String(error),
-            errorStack: error instanceof Error ? error.stack : undefined
-         });
-            res.status(500).json({ 
-            error: error instanceof Error ? error.message : 'Internal server error' 
-            });
-      }
-    });
-
-    // Notify about new loan request - called by frontend after transaction
-    this.app.post(
-      '/notify-loan',
-      notifyIpLimit,
-      authMw(),
-      notifyPubkeyLimit,
-      async (req, res) => {
-      try {
-        const { signature, borrower, loanId, fileId } = req.body;
-
-        if (!signature || !borrower) {
-          logger.warn('Notify loan request missing required fields', { signature, borrower });
-          return res.status(400).json({
-            error: 'Transaction signature and borrower address required'
-          });
-        }
-
-        // Authz: signing wallet must match the body's `borrower`.
-        if (config.authMode !== 'off' && req.authPubkey && req.authPubkey !== borrower) {
-          logger.warn('notify-loan.authz_mismatch', {
-            authPubkey: req.authPubkey,
-            borrower,
-            reqId: req.id,
-          });
-          return res.status(403).json({
-            error: 'Authenticated pubkey does not match `borrower` field',
-            code: 'authz_mismatch',
-          });
-        }
-
-        logger.info('Received loan notification', {
-          signature,
-          borrower,
-          loanId: loanId || 'unknown',
-          reqId: req.id,
-        });
-
-        // Check if we have a file upload for this borrower
-        const fileUpload = await this.stateManager.getFileUpload(fileId)
-        if (!fileUpload) {
-          logger.error('No file upload found for borrower', { borrower, signature });
-          return res.status(404).json({ 
-            error: 'No file upload found for this borrower. Please upload a file first.' 
-          });
-        }
-
-        /* Check if this loan is already being processed
-        if (loanId) {
-          const existingDeployment = await this.stateManager.getDeployment(loanId);
-          if (existingDeployment && existingDeployment.status !== 'failed') {
-            logger.info('Loan already being processed', { loanId, status: existingDeployment.status });
-            return res.json({
-              success: true,
-              message: 'Loan already being processed',
-              status: existingDeployment.status,
-              loanId,
-            });
-          }
-        }*/
-
-        // Respond immediately - we'll process in background
-        res.json({
-          success: true,
-          message: 'Loan notification received. Deployment will begin shortly.',
-          signature,
-          fileId: fileUpload.fileId,
-        });
-
-        // Process the loan asynchronously
-        // Give the transaction a moment to be confirmed
-        setTimeout(async () => {
-          try {
-            await this.processLoanFromSignature(signature, borrower, fileUpload, loanId);
-          } catch (error) {
-            logger.error('Error processing loan from signature', { 
-              signature, 
-              borrower, 
-              error 
-            });
-          }
-        }, 2000); // Wait 2 seconds for confirmation
-
-      } catch (error) {
-        logger.error('Error handling loan notification', { error });
-        res.status(500).json({ 
-          error: error instanceof Error ? error.message : 'Internal server error' 
-        });
-      }
-    });
-
-    // Upload .so file and calculate deployment cost.
-    //
-    // Middleware order:
-    //   1. uploadIpLimit  — cheap DoS gate before we parse anything.
-    //   2. multer (memoryStorage) — populates req.file.buffer for auth/validation.
-    //   3. requireAuth    — hashes req.file.buffer as BODY_HASH and verifies sig.
-    //   4. upload*PubkeyLimit — abuse gate, only meaningful with req.authPubkey set.
-    this.app.post(
-      '/upload',
-      uploadIpLimit,
-      this.upload.single('file'),
-      authMw(),
-      uploadPubkeyLimit,
-      uploadPubkeyDailyLimit,
-      async (req, res) => {
-        let tmpPath: string | null = null;
-        try {
-          if (!req.file) {
-            return res.status(400).json({ error: 'No file uploaded' });
-          }
-
-          const { borrower } = req.body as { borrower?: string };
-          if (!borrower) {
-            return res.status(400).json({ error: 'Borrower address required' });
-          }
-
-          // Authz: the wallet that signed must equal the borrower field.
-          // Skipped in `off` mode (no authPubkey set).
-          if (config.authMode !== 'off' && req.authPubkey && req.authPubkey !== borrower) {
-            logger.warn('upload.authz_mismatch', {
-              authPubkey: req.authPubkey,
-              borrower,
-              reqId: req.id,
-            });
-            return res.status(403).json({
-              error: 'Authenticated pubkey does not match `borrower` field',
-              code: 'authz_mismatch',
-            });
-          }
-
-          // Validate filename — strip any path components and reject NUL.
-          const safeFileName = path.basename(req.file.originalname || 'program.so');
-          if (safeFileName.includes('\0') || safeFileName.includes('..')) {
-            metrics.validationRejected?.inc({ reason: 'bad_filename' });
-            return res.status(400).json({ error: 'Invalid filename', code: 'bad_filename' });
-          }
-
-          const buffer = req.file.buffer;
-
-          // ELF magic check BEFORE persisting anything.
-          if (buffer.length < 4 || buffer[0] !== 0x7f || buffer[1] !== 0x45 || buffer[2] !== 0x4c || buffer[3] !== 0x46) {
-            metrics.validationRejected?.inc({ reason: 'not_elf' });
-            return res.status(400).json({ error: 'File is not a valid ELF binary', code: 'not_elf' });
-          }
-
-          // Size cap (multer already enforces, but double-check explicitly).
-          if (buffer.length > config.maxUploadBytes) {
-            metrics.validationRejected?.inc({ reason: 'too_large' });
-            return res.status(413).json({
-              error: `File exceeds ${config.maxUploadBytes} byte limit`,
-              code: 'too_large',
-            });
-          }
-
-          // Dedup: same borrower uploading bit-identical bytes returns the
-          // existing fileId rather than creating a duplicate record.
-          const hash = createHash('sha256').update(buffer).digest('hex');
-          const existing = await this.stateManager.getAllFileUploadsByBorrower(borrower);
-          const dupe = existing.find((u) => u.binaryHash === hash && u.status !== 'deployed');
-          if (dupe) {
-            logger.info('upload.dedup', { borrower, fileId: dupe.fileId, reqId: req.id });
-            return res.json({
-              success: true,
-              fileId: dupe.fileId,
-              estimatedCost: dupe.estimatedCost,
-              binaryHash: dupe.binaryHash,
-              message: 'Matching upload already exists for this wallet.',
-            });
-          }
-
-          logger.info('upload.accepted', {
-            fileName: safeFileName,
-            size: buffer.length,
-            borrower,
-            reqId: req.id,
-          });
-
-          // Write buffer to a temp file so binaryManager.storeBinary can copy it.
-          // (Refactoring storeBinary to accept a Buffer is out of scope here.)
-          await fs.mkdir(config.uploadPath, { recursive: true });
-          tmpPath = path.join(config.uploadPath, `${uuidv4()}.so`);
-          await fs.writeFile(tmpPath, buffer);
-
-          const fileId = createHash('sha256')
-            .update(borrower + Date.now())
-            .digest('hex')
-            .substring(0, 16);
-
-          const { hash: storedHash, destinationPath } = await this.binaryManager.storeBinary(
-            fileId,
-            tmpPath,
-          );
-
-          const estimatedCost = await this.binaryManager.estimateDeploymentCost(destinationPath);
-
-          const fileUpload: FileUploadRecord = {
-            fileId,
-            borrower,
-            fileName: safeFileName,
-            filePath: destinationPath,
-            fileSize: buffer.length,
-            binaryHash: storedHash,
-            estimatedCost,
-            status: 'ready',
-            createdAt: Date.now(),
-          };
-
-          await this.stateManager.saveFileUpload(fileUpload);
-
-          metrics.fileUploads.inc();
-
-          res.json({
-            success: true,
-            fileId,
-            estimatedCost,
-            binaryHash: storedHash,
-            message: 'File uploaded successfully. You can now request a loan for deployment.',
-          });
-        } catch (error) {
-          logger.error('upload.error', {
-            errorMessage: error instanceof Error ? error.message : String(error),
-            reqId: req.id,
-          });
-          res.status(500).json({ error: String(error) });
-        } finally {
-          if (tmpPath) {
-            await fs.unlink(tmpPath).catch(() => {});
-          }
-        }
+    const deps: RouteDeps = {
+      stateManager: this.stateManager,
+      binaryManager: this.binaryManager,
+      orchestrator: () => this.orchestrator,
+      multer: this.upload,
+      rateLimit,
+      authMw,
+      logger,
+      metrics: {
+        fileUploads: metrics.fileUploads,
+        validationRejected: metrics.validationRejected,
+        authFailures: metrics.authFailures,
       },
-    );
+      config: {
+        authMode: config.authMode,
+        maxUploadBytes: config.maxUploadBytes,
+        uploadPath: config.uploadPath,
+      },
+      processLoanFromSignature: (sig, borrower, fileUpload, loanId) =>
+        this.processLoanFromSignature(sig, borrower, fileUpload, loanId),
+    };
 
-    // Get deployment status — must be the borrower on the record.
-    this.app.get(
-      '/deployments/:loanId',
-      getIpLimit,
-      authMw(),
-      getPubkeyLimit,
-      async (req, res) => {
-      try {
-        const deployment = await this.stateManager.getDeployment(req.params.loanId);
-        if (!deployment) {
-          return res.status(404).json({ error: 'Deployment not found' });
-        }
-        if (config.authMode !== 'off' && req.authPubkey && deployment.borrower !== req.authPubkey) {
-          return res.status(403).json({ error: 'Not authorized to view this deployment', code: 'authz_mismatch' });
-        }
-        res.json(deployment);
-      } catch (error) {
-        res.status(500).json({ error: String(error) });
-      }
-    });
+    // OpenAPI must mount BEFORE the route registrars so the registry is
+    // populated by the time /openapi.json is first hit (mountOpenApi is
+    // lazy, so the order is actually fine either way -- but keeping spec
+    // mount close to other ops endpoints is clearer).
+    mountOpenApi(this.app);
+    registerHealthRoutes(this.app, registry);
+    registerJobRoutes(this.app, deps);
+    registerLoanRoutes(this.app, deps);
+    registerUploadRoutes(this.app, deps);
+    registerDeploymentRoutes(this.app, deps);
 
-    // Get all deployments for a borrower — `:borrower` must match the signer.
-    this.app.get(
-      '/deployments/borrower/:borrower',
-      getIpLimit,
-      authMw(),
-      getPubkeyLimit,
-      async (req, res) => {
-      try {
-        if (config.authMode !== 'off' && req.authPubkey && req.params.borrower !== req.authPubkey) {
-          return res.status(403).json({ error: 'Borrower in path does not match authenticated pubkey', code: 'authz_mismatch' });
-        }
-        const allDeployments = await this.stateManager.getAllDeployments();
-        const borrowerDeployments = allDeployments.filter(
-          d => d.borrower === req.params.borrower
-        );
-        res.json(borrowerDeployments);
-      } catch (error) {
-        res.status(500).json({ error: String(error) });
-      }
-    });
-
-    // Get file upload status — must be the borrower on the upload record.
-    this.app.get(
-      '/uploads/:fileId',
-      getIpLimit,
-      authMw(),
-      getPubkeyLimit,
-      async (req, res) => {
-      try {
-        const upload = await this.stateManager.getFileUpload(req.params.fileId);
-        if (!upload) {
-          return res.status(404).json({ error: 'Upload not found' });
-        }
-        if (config.authMode !== 'off' && req.authPubkey && upload.borrower !== req.authPubkey) {
-          return res.status(403).json({ error: 'Not authorized to view this upload', code: 'authz_mismatch' });
-        }
-        res.json(upload);
-      } catch (error) {
-        res.status(500).json({ error: String(error) });
-      }
-    });
-
-    // Get all uploads for a borrower — `:borrower` must match the signer.
-this.app.get(
-  '/uploads/borrower/:borrower',
-  getIpLimit,
-  authMw(),
-  getPubkeyLimit,
-  async (req, res) => {
-  try {
-    if (config.authMode !== 'off' && req.authPubkey && req.params.borrower !== req.authPubkey) {
-      return res.status(403).json({ error: 'Borrower in path does not match authenticated pubkey', code: 'authz_mismatch' });
-    }
-    const uploads = await this.stateManager.getAllFileUploadsByBorrower(req.params.borrower);
-
-    // Sort by creation date (newest first)
-    const sortedUploads = uploads.sort((a, b) => b.createdAt - a.createdAt);
-
-    res.json(sortedUploads);
-  } catch (error) {
-    logger.error('Error fetching uploads for borrower', {
-      borrower: req.params.borrower,
-      error
-    });
-    res.status(500).json({ error: String(error) });
+    // Global error handler must be the LAST middleware -- everything that
+    // next(err)s falls through to here.
+    this.app.use(errorHandler(logger));
   }
-});
 
-// Optional: Add pagination support
-this.app.get(
-  '/uploads/borrower/:borrower/paginated',
-  getIpLimit,
-  authMw(),
-  getPubkeyLimit,
-  async (req, res) => {
-  try {
-    if (config.authMode !== 'off' && req.authPubkey && req.params.borrower !== req.authPubkey) {
-      return res.status(403).json({ error: 'Borrower in path does not match authenticated pubkey', code: 'authz_mismatch' });
-    }
-    const { limit = '10', offset = '0', status } = req.query;
-    
-    let uploads = await this.stateManager.getAllFileUploadsByBorrower(req.params.borrower);
-    
-    // Filter by status if provided
-    if (status && ['pending', 'ready', 'deployed'].includes(status as string)) {
-      uploads = uploads.filter(u => u.status === status);
-    }
-    
-    // Sort by newest first
-    uploads.sort((a, b) => b.createdAt - a.createdAt);
-    
-    // Paginate
-    const paginatedUploads = uploads.slice(
-      parseInt(offset as string), 
-      parseInt(offset as string) + parseInt(limit as string)
-    );
-    
-    res.json({
-      uploads: paginatedUploads,
-      total: uploads.length,
-      limit: parseInt(limit as string),
-      offset: parseInt(offset as string),
-      hasMore: uploads.length > (parseInt(offset as string) + parseInt(limit as string))
-    });
-  } catch (error) {
-    logger.error('Error fetching paginated uploads', { 
-      borrower: req.params.borrower, 
-      error 
-    });
-    res.status(500).json({ error: String(error) });
-  }
-});
-
-// Optional: Delete an upload
-this.app.delete(
-  '/uploads/:fileId',
-  notifyIpLimit,
-  authMw(),
-  notifyPubkeyLimit,
-  async (req, res) => {
-  try {
-    const upload = await this.stateManager.getFileUpload(req.params.fileId);
-
-    if (!upload) {
-      return res.status(404).json({ error: 'Upload not found' });
-    }
-
-    // Use the signed pubkey as the source of truth for authz. The legacy
-    // `borrower` field in the body is ignored when auth is enforced.
-    const requesterPubkey = config.authMode !== 'off' && req.authPubkey
-      ? req.authPubkey
-      : (req.body as { borrower?: string })?.borrower;
-
-    if (!requesterPubkey || upload.borrower !== requesterPubkey) {
-      return res.status(403).json({ error: 'Unauthorized to delete this upload', code: 'authz_mismatch' });
-    }
-    
-    // Only allow deletion if not already deployed
-    if (upload.status === 'deployed') {
-      return res.status(400).json({ error: 'Cannot delete deployed uploads' });
-    }
-    
-    // Delete the file from disk
-    try {
-      await fs.unlink(upload.filePath);
-    } catch (error) {
-      logger.warn('Failed to delete file from disk', { filePath: upload.filePath, error });
-    }
-    
-    // Delete from state TBI
-   // await this.stateManager.deleteFileUpload(req.params.fileId);
-    
-    res.json({ success: true, message: 'Upload deleted successfully' });
-  } catch (error) {
-    logger.error('Error deleting upload', { fileId: req.params.fileId, error });
-    res.status(500).json({ error: String(error) });
-  }
-   });
-  }
 
   private async processLoanFromSignature(
     signature: string,
@@ -3167,15 +2712,43 @@ this.app.delete(
 }
 
 // ============ Main Application ============
+/**
+ * Refuse to boot in `off` auth mode when NODE_ENV=production. Step 3.1 of
+ * the OWASP hardening plan: the route-level authz check now always runs
+ * when a pubkey was authenticated, but `off` mode skips authentication
+ * entirely (no req.authPubkey set), which would still permit cross-user
+ * access if it ever shipped to production. Failing loudly at boot is the
+ * least-surprise way to prevent that.
+ */
+function assertAuthSafeForProduction(): void {
+  const isProd = process.env.NODE_ENV === 'production';
+  if (isProd && config.authMode === 'off') {
+    const msg =
+      'Refusing to start: REQUIRE_AUTH=off is not allowed when NODE_ENV=production. ' +
+      'Set REQUIRE_AUTH=enforce (recommended) or REQUIRE_AUTH=warn during rollout.';
+    logger.error('boot.auth_mode_unsafe', { authMode: config.authMode, nodeEnv: process.env.NODE_ENV });
+    throw new Error(msg);
+  }
+  if (isProd && config.authMode === 'warn') {
+    logger.warn('boot.auth_mode_warn_in_prod', {
+      authMode: config.authMode,
+      message:
+        'REQUIRE_AUTH=warn lets unsigned requests through (logged only). Acceptable for staged rollout but should be flipped to `enforce` once clients are migrated.',
+    });
+  }
+}
+
 async function main() {
-  logger.info('Starting Solana Lending Protocol Deployer Service', { 
+  logger.info('Starting Solana Lending Protocol Deployer Service', {
     config: {
       ...config,
       programId: config.programId.toBase58()
-    } 
+    }
   });
 
   try {
+    assertAuthSafeForProduction();
+
     // Initialize directories
     await fs.mkdir(config.binaryStoragePath, { recursive: true });
     await fs.mkdir(config.uploadPath, { recursive: true });
@@ -3248,11 +2821,10 @@ async function main() {
     await orchestrator.start();
 
     logger.info('Deployer service started successfully');
-    logger.info('API endpoints available:');
-    logger.info(`  - POST http://localhost:${config.port}/upload - Upload program file`);
-    logger.info(`  - POST http://localhost:${config.port}/notify-loan - Notify about loan request`);
-    logger.info(`  - GET http://localhost:${config.port}/health - Health check`);
-    logger.info(`  - GET http://localhost:${config.port}/metrics - Prometheus metrics`);
+    logger.info(`API spec:  http://localhost:${config.port}/openapi.json`);
+    logger.info(`API docs:  http://localhost:${config.port}/docs`);
+    logger.info(`Health:    http://localhost:${config.port}/health`);
+    logger.info(`Metrics:   http://localhost:${config.port}/metrics`);
 
     /*/ Test GraphQL connection 
     try {

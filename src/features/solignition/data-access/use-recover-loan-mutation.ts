@@ -46,6 +46,11 @@ export function useRecoverLoanMutation({ account }: { account: UiWalletAccount }
       await queryClient.invalidateQueries({
         queryKey: ['protocol-config', { cluster: cluster.id }],
       })
+      // Recovery also moves SOL between the borrower escrow and the vault,
+      // so refresh the share-price input.
+      await queryClient.invalidateQueries({
+        queryKey: ['vault-balance', { cluster: cluster.id }],
+      })
     },
   })
 }

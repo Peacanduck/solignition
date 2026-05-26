@@ -474,13 +474,15 @@ export function DepositWithdrawPanel({ account }: { account: UiWalletAccount }) 
   return (
     <div className="space-y-6">
       
-      {depositorQuery.data && configQuery.data && (
+      {depositorQuery.data && configQuery.data && vaultBalanceQuery.data !== undefined && (
         <DepositorStatsDisplay
           depositedAmount={depositorQuery.data.data.depositedAmount}
           shareAmount={depositorQuery.data.data.shareAmount}
           totalShares={configQuery.data.data.totalShares}
           totalDeposits={configQuery.data.data.totalDeposits}
           totalYieldDistributed={configQuery.data.data.totalYieldDistributed}
+          vaultBalance={vaultBalanceQuery.data}
+          totalLoansOutstanding={configQuery.data.data.totalLoansOutstanding}
         />
       )}
 

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { UiWalletAccount } from '@wallet-ui/react'
 import { toast } from 'sonner'
 import { useFetchSigned } from '@/lib/fetch-signed'
+import { sha256Hex } from '@/lib/sha256'
 
 const DEPLOYER_API_URL = import.meta.env.VITE_DEPLOYER_API_URL || 'http://localhost:3000'
 
@@ -27,7 +28,30 @@ export interface PaginatedUploadsResponse {
   hasMore: boolean
 }
 
-// Hook to fetch all uploads for a borrower
+// v1 returns the paginated envelope for every list call. The unpaginated
+// hook below is a thin wrapper that asks for the server-cap-sized page and
+// hands callers just the array, preserving the old call sites' shape.
+function buildUploadsListUrl({
+  borrower,
+  status,
+  limit,
+  offset,
+}: {
+  borrower: string
+  status?: 'pending' | 'ready' | 'deployed'
+  limit: number
+  offset: number
+}): string {
+  const params = new URLSearchParams({
+    borrower,
+    limit: limit.toString(),
+    offset: offset.toString(),
+    ...(status && { status }),
+  })
+  return `${DEPLOYER_API_URL}/v1/uploads?${params}`
+}
+
+// Hook to fetch all uploads for a borrower (returns the array directly).
 export function useUploadedPrograms({
   account,
   status,
@@ -40,10 +64,12 @@ export function useUploadedPrograms({
   return useQuery({
     queryKey: ['uploaded-programs', account.address, status],
     queryFn: async () => {
-      const url = status
-        ? `${DEPLOYER_API_URL}/uploads/borrower/${account.address}?status=${status}`
-        : `${DEPLOYER_API_URL}/uploads/borrower/${account.address}`
-
+      const url = buildUploadsListUrl({
+        borrower: account.address,
+        status,
+        limit: 200,
+        offset: 0,
+      })
       const response = await fetchSigned(url)
 
       if (!response.ok) {
@@ -53,8 +79,8 @@ export function useUploadedPrograms({
         throw new Error('Failed to fetch uploaded programs')
       }
 
-      const data: UploadedProgram[] = await response.json()
-      return data
+      const data: PaginatedUploadsResponse = await response.json()
+      return data.uploads
     },
     staleTime: 30000, // Consider data stale after 30 seconds
     retry: (failureCount, error) => {
@@ -66,7 +92,7 @@ export function useUploadedPrograms({
   })
 }
 
-// Hook to fetch paginated uploads
+// Hook to fetch paginated uploads (returns the full envelope).
 export function useUploadedProgramsPaginated({
   account,
   limit = 10,
@@ -83,20 +109,11 @@ export function useUploadedProgramsPaginated({
   return useQuery({
     queryKey: ['uploaded-programs-paginated', account.address, limit, offset, status],
     queryFn: async () => {
-      const params = new URLSearchParams({
-        limit: limit.toString(),
-        offset: offset.toString(),
-        ...(status && { status }),
-      })
-
-      const response = await fetchSigned(
-        `${DEPLOYER_API_URL}/uploads/borrower/${account.address}/paginated?${params}`,
-      )
-
+      const url = buildUploadsListUrl({ borrower: account.address, status, limit, offset })
+      const response = await fetchSigned(url)
       if (!response.ok) {
         throw new Error('Failed to fetch uploaded programs')
       }
-
       const data: PaginatedUploadsResponse = await response.json()
       return data
     },
@@ -110,24 +127,18 @@ export function useDeleteUploadedProgram({ account }: { account: UiWalletAccount
 
   return useMutation({
     mutationFn: async (fileId: string) => {
-      // The deployer authorizes the delete using `X-Auth-Pubkey` (signed by
-      // the wallet) rather than the body's `borrower`, but we keep the field
-      // for compatibility during the v1.1 transition.
-      const body = JSON.stringify({ borrower: account.address })
-      const response = await fetchSigned(`${DEPLOYER_API_URL}/uploads/${fileId}`, {
+      // v1 DELETE authorizes via X-Auth-Pubkey alone (no body), and
+      // returns 204 No Content on success.
+      const response = await fetchSigned(`${DEPLOYER_API_URL}/v1/uploads/${fileId}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body,
       })
 
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || 'Failed to delete upload')
       }
-
-      return await response.json()
+      // 204 has no body; nothing to parse.
+      return { success: true as const }
     },
     onSuccess: () => {
       toast.success('Program deleted successfully')
@@ -152,12 +163,16 @@ export function useUploadProgramFile({ account }: { account: UiWalletAccount }) 
   return useMutation({
     mutationFn: async ({ file, borrower }: { file: File; borrower: string }) => {
       const fileBytes = new Uint8Array(await file.arrayBuffer())
+      // Hash-pin the upload so a corrupt transfer / wrong-file mix-up
+      // fails 422 client-side instead of being silently stored (Step 3.4).
+      const expectedHash = await sha256Hex(fileBytes)
 
       const formData = new FormData()
       formData.append('file', file)
       formData.append('borrower', borrower)
+      formData.append('expectedHash', expectedHash)
 
-      const response = await fetchSigned(`${DEPLOYER_API_URL}/upload`, {
+      const response = await fetchSigned(`${DEPLOYER_API_URL}/v1/uploads`, {
         method: 'POST',
         body: formData,
         fileBytes,

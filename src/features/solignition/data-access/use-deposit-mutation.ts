@@ -48,6 +48,12 @@ const [vault] = await getProgramDerivedAddress({
       await queryClient.invalidateQueries({
         queryKey: ['protocol-config', { cluster: cluster.id }],
       })
+      // Vault balance feeds the share-price formula on the dashboard. Without
+      // this invalidate the dashboard would read fresh shares against a 15s-
+      // stale vault balance and display a phantom loss until the next poll.
+      await queryClient.invalidateQueries({
+        queryKey: ['vault-balance', { cluster: cluster.id }],
+      })
     },
     onError: (error: Error) => {
        queryClient.invalidateQueries({
@@ -55,6 +61,9 @@ const [vault] = await getProgramDerivedAddress({
       })
        queryClient.invalidateQueries({
         queryKey: ['protocol-config', { cluster: cluster.id }],
+      })
+       queryClient.invalidateQueries({
+        queryKey: ['vault-balance', { cluster: cluster.id }],
       })
           toastTx("erer", `Error Deposit Unsuccessful: ${error.message}`)
         },

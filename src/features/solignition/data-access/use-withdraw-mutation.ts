@@ -37,6 +37,11 @@ export function useWithdrawMutation({ account }: { account: UiWalletAccount }) {
       await queryClient.invalidateQueries({
         queryKey: ['protocol-config', { cluster: cluster.id }],
       })
+      // Vault balance feeds the share-price formula on the dashboard. See
+      // the matching comment in use-deposit-mutation for context.
+      await queryClient.invalidateQueries({
+        queryKey: ['vault-balance', { cluster: cluster.id }],
+      })
     },
   })
 }

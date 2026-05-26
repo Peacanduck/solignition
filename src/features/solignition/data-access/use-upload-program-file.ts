@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { UiWalletAccount } from '@wallet-ui/react'
 import { useFetchSigned } from '@/lib/fetch-signed'
+import { sha256Hex } from '@/lib/sha256'
 
 const DEPLOYER_API_URL = import.meta.env.VITE_DEPLOYER_API_URL || 'http://localhost:3000'
 
@@ -23,12 +24,16 @@ export function useUploadProgramFile({ account }: { account: UiWalletAccount }) 
   return useMutation({
     mutationFn: async ({ file, borrower }: { file: File; borrower: string }) => {
       const fileBytes = new Uint8Array(await file.arrayBuffer())
+      // Hash-pin the upload so a bit-flip in transit or a wrong-file mix-up
+      // surfaces as 422 instead of a silent corrupt deploy (Step 3.4).
+      const expectedHash = await sha256Hex(fileBytes)
 
       const formData = new FormData()
       formData.append('file', file)
       formData.append('borrower', borrower)
+      formData.append('expectedHash', expectedHash)
 
-      const response = await fetchSigned(`${DEPLOYER_API_URL}/upload`, {
+      const response = await fetchSigned(`${DEPLOYER_API_URL}/v1/uploads`, {
         method: 'POST',
         body: formData,
         fileBytes,

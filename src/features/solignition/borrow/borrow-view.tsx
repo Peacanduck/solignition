@@ -38,7 +38,9 @@ export default function BorrowView() {
           {state.step === 'sign' ? (
             <StepSign state={state} dispatch={dispatch} account={account} />
           ) : null}
-          {state.step === 'status' ? <StepStatus state={state} dispatch={dispatch} /> : null}
+          {state.step === 'status' ? (
+            <StepStatus state={state} dispatch={dispatch} account={account} />
+          ) : null}
         </>
       )}
     </div>

@@ -38,7 +38,23 @@ pub fn process_withdraw(ctx: Context<Withdraw>, shares: u64) -> Result<()> {
     let available = ctx.accounts.vault.lamports();
     require!(amount <= available, ErrorCode::InsufficientLiquidity);
 
-    // BURN SHARES FIRST
+    // Decrement deposited_amount in proportion to the shares being burned.
+    // Without this, deposited_amount is a monotonic lifetime counter and the
+    // frontend's "earnings = currentValue - depositedAmount" formula goes
+    // negative after every withdrawal. We compute the proportional principal
+    // BEFORE burning shares (the denominator is the pre-burn share count).
+    //
+    // principal_withdrawn = deposited_amount * shares / share_amount
+    let principal_withdrawn = (depositor_record.deposited_amount as u128)
+        .checked_mul(shares as u128)
+        .unwrap()
+        .checked_div(depositor_record.share_amount as u128)
+        .unwrap() as u64;
+    depositor_record.deposited_amount = depositor_record
+        .deposited_amount
+        .saturating_sub(principal_withdrawn);
+
+    // BURN SHARES
     depositor_record.share_amount = depositor_record
         .share_amount
         .saturating_sub(shares);

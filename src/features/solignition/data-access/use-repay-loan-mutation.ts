@@ -119,9 +119,10 @@ if (protocolConfigInfo) {
               const notifyBody = JSON.stringify({
                 signature,
                 borrower: account.address,
-                loanId: loanId.toString(),
               })
-              const notifyResponse = await fetchSigned(`${DEPLOYER_API_URL}/notify-repaid`, {
+              const notifyResponse = await fetchSigned(
+                `${DEPLOYER_API_URL}/v1/loans/${loanId.toString()}/repayments`,
+                {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -159,6 +160,11 @@ if (protocolConfigInfo) {
       })
       await queryClient.invalidateQueries({
         queryKey: ['protocol-config', { cluster: cluster.id }],
+      })
+      // Repayment returns principal + interest to the vault, so the
+      // dashboard's share-price math is stale until the next poll.
+      await queryClient.invalidateQueries({
+        queryKey: ['vault-balance', { cluster: cluster.id }],
       })
     },
     onError: (error: Error) => {
