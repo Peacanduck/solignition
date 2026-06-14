@@ -1,0 +1,19 @@
+{
+  "name": "@solignition/anchor-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Codama-generated Solignition program client (TypeScript) plus hand-written helpers",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "dependencies": {
+    "@solana/kit": "^6.8.0"
+  }
+}

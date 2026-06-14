@@ -4,8 +4,8 @@ import type { Address } from '@solana/kit'
 import type { DepositorRecord } from '@project/anchor'
 import { clusterApiUrl, Connection, PublicKey } from '@solana/web3.js'
 import { AnchorProvider, BN, Idl as IDL, Program, setProvider } from '@coral-xyz/anchor'
-import idl from '../../../../anchor/target/idl/solignition.json'
-import type { Solignition } from '../../../../anchor/target/types/solignition.ts'
+import idl from '../../../../../../anchor/target/idl/solignition.json'
+import type { Solignition } from '../../../../../../anchor/target/types/solignition.ts'
 
 export type DepositorAccount = {
   address: Address

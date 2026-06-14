@@ -8,9 +8,9 @@ import type { Address } from '@solana/kit'
 import type { Loan } from '@project/anchor'
 import { useProtocolConfig } from './use-protocol-config'
 import {  clusterApiUrl, Connection, PublicKey } from "@solana/web3.js";
-import idl from '../../../../anchor/target/idl/solignition.json';
+import idl from '../../../../../../anchor/target/idl/solignition.json';
 import { AnchorProvider, Idl as IDL, Program, setProvider } from '@coral-xyz/anchor';
-import type { Solignition } from "../../../../anchor/target/types/solignition.ts";
+import type { Solignition } from "../../../../../../anchor/target/types/solignition.ts";
 
 export type LoanAccount = {
   address: Address
@@ -160,9 +160,9 @@ import type { Address } from '@solana/kit'
 import type { Loan } from '@project/anchor'
 import { useProtocolConfig } from './use-protocol-config'
 import { clusterApiUrl, Connection, PublicKey } from "@solana/web3.js"
-import idl from '../../../../anchor/target/idl/solignition.json'
+import idl from '../../../../../../anchor/target/idl/solignition.json'
 import { AnchorProvider, Idl as IDL, Program, setProvider, BN } from '@coral-xyz/anchor'
-import type { Solignition } from "../../../../anchor/target/types/solignition.ts"
+import type { Solignition } from "../../../../../../anchor/target/types/solignition.ts"
 
 
 export type LoanAccount = {
