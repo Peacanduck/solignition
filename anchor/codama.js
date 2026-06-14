@@ -3,6 +3,6 @@
 import { createCodamaConfig } from './src/create-codama-config.js'
 
 export default createCodamaConfig({
-  clientJs: 'anchor/src/client/js/generated',
+  clientJs: '../apps/frontend/src/anchor-client/generated',
   idl: 'target/idl/solignition.json',
 })
