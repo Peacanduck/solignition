@@ -20,7 +20,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@project/anchor': path.resolve(__dirname, './clients/js/src'),
+      '@project/anchor': path.resolve(__dirname, '../../clients/js/src'),
     },
   },
   test: {

@@ -1,5 +1,5 @@
 {
-  "name": "solana-lending-deployer",
+  "name": "@solignition/deployer",
   "version": "1.0.0",
   "description": "Off-chain deployer service for Solana lending protocol",
   "main": "dist/index.js",
