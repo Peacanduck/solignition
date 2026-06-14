@@ -12,6 +12,14 @@ The **## API** sections below are the contract surface for the deployer service
 
 ## Unreleased
 
+### API — production server URL in the OpenAPI spec
+
+`openapi.json` (and `GET /openapi.json`) now advertise the production base URL
+`https://api.solignition.ngrok.app` in `servers[0].url` instead of the relative
+`/`. The generator hardcodes it so the committed baseline stays deterministic.
+Informational for clients and Swagger UI only — no endpoint, schema, or
+status-code changes.
+
 ### API — v1 launched, unversioned endpoints removed (breaking)
 
 The deployer's HTTP surface was refactored from an ad-hoc mix of RPC and REST

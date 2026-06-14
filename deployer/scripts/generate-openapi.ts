@@ -76,7 +76,12 @@ if (openapiRegistry.definitions.length === 0) {
   process.exit(1);
 }
 
-const spec = buildOpenApiSpec();
+// Public base URL the deployer is served from in production. Hardcoded (not
+// read from env) so the generated spec is deterministic and the committed
+// openapi.json baseline matches byte-for-byte in CI.
+const PROD_SERVER_URL = 'https://api.solignition.ngrok.app';
+
+const spec = buildOpenApiSpec({ serverUrl: PROD_SERVER_URL });
 
 const outArg = process.argv[2];
 if (outArg === '-') {
