@@ -22,9 +22,9 @@
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
     "paths": {
-      "@project/anchor": ["../../clients/js/src"],
+      "@project/anchor": ["./src/anchor-client"],
       "@/*": ["./src/*"]
     }
   },
-  "include": ["../../clients/js/src", "src"]
+  "include": ["src"]
 }

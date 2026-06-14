@@ -6,7 +6,6 @@
   "description": "Solignition monorepo root — Anchor program, frontend, deployer, landing, docs, generated clients",
   "workspaces": [
     "apps/*",
-    "clients/*",
     "deployer",
     "docs",
     "landing"
@@ -23,13 +22,14 @@
     "preview": "npm run preview -w @solignition/frontend",
     "lint": "npm run lint -w @solignition/frontend",
     "codama:js": "codama run js -c ./anchor/codama.js",
+    "sync:anchor": "node scripts/sync-anchor-artifacts.mjs",
     "ci": "npm run build && npm run lint && npm run format:check && npm run codama:js",
     "dev": "concurrently -k -n SURFPOOL,BACKEND,FRONTEND -c blue,green,yellow \"npm run surfpool -- --no-tui\" \"npm run backend\" \"npm run frontend\"",
     "dev:all": "concurrently -k -n SURFPOOL,BACKEND,FRONTEND -c blue,green,yellow \"npm run surfpool\" \"npm run backend\" \"npm run frontend\"",
     "test:full": "concurrently -k -n SURFPOOL,ANCHOR_TEST -c blue,magenta \"npm run surfpool\" \"wait-on tcp:8899 && npm run anchor-test\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "setup": "npm run anchor keys sync && npm run anchor build && npm run codama:js",
+    "setup": "npm run anchor keys sync && npm run anchor build && npm run codama:js && npm run sync:anchor",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "tag-release": "changeset tag"
