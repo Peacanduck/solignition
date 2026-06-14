@@ -51,7 +51,7 @@ Located in `anchor/programs/solignition/src/lib.rs`, the on-chain program handle
 ### Web Interface (React + Vite) — `apps/frontend`
 The `@solignition/frontend` package, a modern web3 interface built with:
 - **Gill SDK**: Simplified Solana wallet integration
-- **Codama-Generated Client** (`@solignition/anchor-client`, in `clients/js`): Type-safe TypeScript client from the program IDL, imported via the `@project/anchor` alias
+- **Codama-Generated Client** (in `apps/frontend/src/anchor-client`): Type-safe TypeScript client from the program IDL, imported via the `@project/anchor` alias
 - **shadcn/ui + Tailwind**: Professional, accessible UI components
 - **Wallet UI Components**: Pre-built wallet connection components
 
@@ -102,7 +102,7 @@ Build the Solana program:
 npm run anchor-build
 ```
 
-Generate the TypeScript client (Codama → `clients/js/src/generated`):
+Generate the TypeScript client (Codama → `apps/frontend/src/anchor-client/generated`):
 
 ```bash
 npm run codama:js
@@ -153,15 +153,15 @@ Update the cluster in the web interface to connect to devnet.
 ```
 solignition/                     # Monorepo root (npm workspaces + changesets)
 ├── apps/
-│   └── frontend/                # @solignition/frontend — React + Vite web app
+│   └── frontend/                # @solignition/frontend — React + Vite web app (self-contained)
 │       └── src/
+│           ├── anchor-client/   # Codama-generated program client (codama:js output)
+│           ├── anchor-idl/      # Anchor IDL + types, synced in via `npm run sync:anchor`
 │           ├── components/      # React components (incl. solana/ wallet, ui/ shadcn)
 │           └── features/        # Feature UIs (solignition/, account/)
-├── clients/
-│   └── js/                      # @solignition/anchor-client — Codama client + helpers
 ├── anchor/                      # Solana program (Anchor)
 │   ├── programs/solignition/    # On-chain program source (lib.rs)
-│   ├── target/idl, target/types # Generated IDL + types (source for the client)
+│   ├── target/idl, target/types # Generated IDL + types (synced into the frontend)
 │   └── tests/                   # Program tests
 ├── deployer/                    # @solignition/deployer — Express deploy service
 │   ├── src/                     # Service source
@@ -180,11 +180,10 @@ array and root lockfile exist for local dev and changesets discovery, not for de
 
 | Package | Path | Deploys to |
 | --- | --- | --- |
-| `@solignition/frontend` | `apps/frontend` | Vercel (Root Directory = `apps/frontend`, with "Include files outside the Root Directory" enabled) |
+| `@solignition/frontend` | `apps/frontend` | Vercel (Root Directory = `apps/frontend`; self-contained, plain isolated install) |
 | `@solignition/landing` | `landing` | Vercel |
 | `@solignition/docs` | `docs` | Vercel |
 | `@solignition/deployer` | `deployer` | Azure VM via pm2 (Docker is future scaling) |
-| `@solignition/anchor-client` | `clients/js` | internal — bundled into the frontend |
 | anchor program | `anchor` | `anchor deploy` (upgrade authority) |
 
 ### Versioning with changesets
