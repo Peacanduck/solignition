@@ -39,6 +39,7 @@ import { registerJobRoutes } from './api/routes/jobs';
 import { registerLoanRoutes } from './api/routes/loans';
 import { registerUploadRoutes } from './api/routes/uploads';
 import { registerDeploymentRoutes } from './api/routes/deployments';
+import { registerProjectRoutes } from './api/routes/projects';
 import type { RouteDeps } from './api/routes/types';
 
 // Load environment variables
@@ -181,6 +182,26 @@ interface FileUploadRecord {
   estimatedCost: number;
   status: 'pending' | 'ready' | 'deployed';
   createdAt: number;
+}
+
+// Off-chain grouping for multi-program "projects". Each program stays its own
+// on-chain Loan + DeploymentRecord; this record only bundles them. Mirrors the
+// ProjectRecord interface in api/routes/types.ts.
+interface ProjectProgramRef {
+  loanId: string;
+  fileId: string;
+  index: number;
+  name?: string;
+}
+
+interface ProjectRecord {
+  projectId: string;
+  borrower: string;
+  name?: string;
+  signature: string;
+  programs: ProjectProgramRef[];
+  createdAt: number;
+  updatedAt: number;
 }
 
 interface LoanAccount {
@@ -461,6 +482,44 @@ async getDeploymentsPage(opts: {
   const page = matches.slice(offset, offset + limit);
   return {
     deployments: page,
+    total: matches.length,
+    hasMore: matches.length > offset + limit,
+  };
+}
+
+// ── Projects (multi-program grouping) ──────────────────────────────────────
+async getProject(projectId: string): Promise<ProjectRecord | null> {
+  try {
+    return await this.db.get(`project:${projectId}`);
+  } catch (error: any) {
+    if (error.notFound) return null;
+    throw error;
+  }
+}
+
+async saveProject(record: ProjectRecord): Promise<void> {
+  await this.db.put(`project:${record.projectId}`, record);
+}
+
+/** Projects equivalent of getDeploymentsPage (same prefix-scan + cap). */
+async getProjectsPage(opts: {
+  borrower?: string;
+  limit: number;
+  offset: number;
+}): Promise<{ projects: ProjectRecord[]; total: number; hasMore: boolean }> {
+  const { borrower, limit, offset } = opts;
+  const HARD_CAP = Math.max(limit + offset + 1, 1000);
+  const matches: ProjectRecord[] = [];
+  for await (const [key, value] of this.db.iterator()) {
+    if (!key.startsWith('project:')) continue;
+    if (borrower && value.borrower !== borrower) continue;
+    matches.push(value);
+    if (matches.length >= HARD_CAP) break;
+  }
+  matches.sort((a, b) => b.updatedAt - a.updatedAt);
+  const page = matches.slice(offset, offset + limit);
+  return {
+    projects: page,
     total: matches.length,
     hasMore: matches.length > offset + limit,
   };
@@ -2483,6 +2542,7 @@ class ApiServer {
     registerLoanRoutes(this.app, deps);
     registerUploadRoutes(this.app, deps);
     registerDeploymentRoutes(this.app, deps);
+    registerProjectRoutes(this.app, deps);
 
     // Global error handler must be the LAST middleware -- everything that
     // next(err)s falls through to here.

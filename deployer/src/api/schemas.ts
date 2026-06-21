@@ -247,6 +247,156 @@ export const UploadListQuery = PaginationQuery.extend({
   status: FileUploadStatus.optional(),
 });
 
+// ── Projects (multi-program deployments) ───────────────────────────────────
+// A "project" bundles 2–4 program loans created in a single signed
+// transaction. Grouping is off-chain metadata only; each program stays its own
+// on-chain Loan + DeploymentRecord. The frontend joins on-chain loans with this
+// metadata. See the "## API — multi-program" CHANGELOG entry.
+
+// Cap a project at 4 bundled `request_loan` instructions (one transaction's
+// size limit); never offer more. Min 2 — a single-program borrow uses /v1/loans.
+export const MIN_PROGRAMS_PER_PROJECT = 2;
+export const MAX_PROGRAMS_PER_PROJECT = 4;
+
+// Client-generated UUID, passed in on create so a re-POST is idempotent
+// (mirrors the "notify after sign" model of POST /v1/loans).
+export const Uuid = z
+  .string()
+  .uuid()
+  .openapi({
+    example: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+    description: 'Client-generated project id (UUID v4)',
+  });
+
+// Optional human label for a project or one of its program slots.
+const ProjectName = z.string().min(1).max(64);
+
+// Aggregate project status, derived from the per-program deployment records by
+// `aggregateProjectStatus()` in routes/projects.ts.
+export const ProjectStatus = z
+  .enum(['pending', 'deploying', 'partial', 'deployed', 'failed'])
+  .openapi('ProjectStatus');
+
+// One program inside a project (stored form; `index` is its position 0..N-1,
+// matching its `request_loan` instruction order in the bundled transaction).
+export const ProjectProgramRef = z
+  .object({
+    loanId: LoanId,
+    fileId: FileId,
+    index: z.number().int().nonnegative(),
+    name: ProjectName.optional(),
+  })
+  .openapi('ProjectProgramRef');
+
+export const ProjectRecord = z
+  .object({
+    projectId: Uuid,
+    borrower: Pubkey,
+    name: ProjectName.optional(),
+    signature: TxSignature,
+    programs: z
+      .array(ProjectProgramRef)
+      .min(MIN_PROGRAMS_PER_PROJECT)
+      .max(MAX_PROGRAMS_PER_PROJECT),
+    createdAt: z.number().int(),
+    updatedAt: z.number().int(),
+  })
+  .openapi('ProjectRecord');
+
+// POST /v1/projects — one program slot in the request body. `index` is assigned
+// server-side from array order, so the client only sends loanId/fileId/name.
+const CreateProjectProgram = z
+  .object({
+    loanId: LoanId,
+    fileId: FileId,
+    name: ProjectName.optional(),
+  })
+  .openapi('CreateProjectProgram');
+
+export const CreateProjectBody = z
+  .object({
+    projectId: Uuid,
+    borrower: Pubkey,
+    signature: TxSignature,
+    name: ProjectName.optional(),
+    programs: z
+      .array(CreateProjectProgram)
+      .min(MIN_PROGRAMS_PER_PROJECT)
+      .max(MAX_PROGRAMS_PER_PROJECT),
+  })
+  .openapi('CreateProjectBody');
+
+export const CreateProjectResponse = z
+  .object({
+    success: z.literal(true),
+    message: z.string(),
+    projectId: Uuid,
+    signature: TxSignature,
+    programs: z.array(ProjectProgramRef),
+  })
+  .openapi('CreateProjectResponse');
+
+// Per-program enriched status, returned by GET /v1/projects/:projectId.
+export const ProjectProgramStatus = z
+  .object({
+    loanId: LoanId,
+    fileId: FileId,
+    index: z.number().int().nonnegative(),
+    name: ProjectName.optional(),
+    status: LoanStatus,
+    deployment: DeploymentRecord.nullable(),
+  })
+  .openapi('ProjectProgramStatus');
+
+export const ProjectAggregateResponse = z
+  .object({
+    project: ProjectRecord,
+    status: ProjectStatus,
+    programs: z.array(ProjectProgramStatus),
+  })
+  .openapi('ProjectAggregateResponse');
+
+// Lightweight aggregate for list views (no per-program deployment records).
+export const ProjectSummary = z
+  .object({
+    project: ProjectRecord,
+    status: ProjectStatus,
+  })
+  .openapi('ProjectSummary');
+
+export const PaginatedProjects = z
+  .object({
+    projects: z.array(ProjectSummary),
+    total: z.number().int().nonnegative(),
+    limit: z.number().int(),
+    offset: z.number().int(),
+    hasMore: z.boolean(),
+  })
+  .openapi('PaginatedProjects');
+
+// POST /v1/projects/:projectId/repayments — borrower signed N bundled
+// `repay_loan` instructions; loanIds are read from the stored project.
+export const CreateProjectRepaymentBody = z
+  .object({
+    signature: TxSignature,
+    borrower: Pubkey,
+  })
+  .openapi('CreateProjectRepaymentBody');
+
+export const ProjectRepaymentResponse = z
+  .object({
+    success: z.literal(true),
+    message: z.string(),
+    projectId: Uuid,
+    programs: z.array(z.object({ loanId: LoanId, auth: Pubkey })),
+  })
+  .openapi('ProjectRepaymentResponse');
+
+export const ProjectIdParam = z.object({ projectId: Uuid });
+export const ProjectListQuery = PaginationQuery.extend({
+  borrower: Pubkey.optional(),
+});
+
 // ── OpenAPI security scheme registration ───────────────────────────────────
 // The custom wallet-signature scheme is best expressed in OpenAPI as a set
 // of apiKey-in-header schemes ANDed together. Clients have to send all four.

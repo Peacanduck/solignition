@@ -12,6 +12,26 @@ The **## API** sections below are the contract surface for the deployer service
 
 ## Unreleased
 
+### API — multi-program project deployments (additive)
+
+New `/v1/projects/*` endpoints let a borrower bundle 2–4 program loans created in
+a single signed transaction into one "project". Grouping is **off-chain metadata
+only** — each program stays its own on-chain `Loan` and its own
+`DeploymentRecord` (still the single source of truth for deploy status). Purely
+additive: single-program borrows keep using `/v1/loans` and never create a
+project.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `POST` | `/v1/projects` | 201. Body `{projectId (client UUID), borrower, signature, name?, programs:[{loanId, fileId, name?}]×2..4}`. Validates each `fileId` belongs to the borrower, stores the grouping, then schedules each program's deployment independently. Re-POST with the same `projectId` is idempotent; a different borrower on an existing id returns **409 `project_conflict`**. |
+| `GET` | `/v1/projects/:projectId` | 200. Aggregate `status` (`pending \| deploying \| partial \| deployed \| failed`) derived from the per-program deployment records, plus each program enriched with its own loan status + deployment record. |
+| `GET` | `/v1/projects?borrower=…&limit=…&offset=…` | 200. Paginated list with the same `{…, total, limit, offset, hasMore}` envelope as deployments; each entry carries the lightweight aggregate status only. Authenticated callers may only list their own projects. |
+| `POST` | `/v1/projects/:projectId/repayments` | 201. Body `{signature, borrower}`. Fans out one `transferDeployedProgramAuth` per program, each scheduled and `.catch`-wrapped independently. |
+
+Per-program side effects are individually error-isolated, so one program
+failing (deploy or authority transfer) never blocks the rest — recover the
+failed loan on its own via the existing per-loan flow.
+
 ### API — production server URL in the OpenAPI spec
 
 `openapi.json` (and `GET /openapi.json`) now advertise the production base URL

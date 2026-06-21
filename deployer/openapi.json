@@ -529,6 +529,418 @@
           "offset",
           "hasMore"
         ]
+      },
+      "ProjectProgramRef": {
+        "type": "object",
+        "properties": {
+          "loanId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^\\d+$",
+            "description": "On-chain loan id (u64 as string)",
+            "example": "42"
+          },
+          "fileId": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 16,
+            "pattern": "^[a-f0-9]{16}$",
+            "example": "0a1b2c3d4e5f6789"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "loanId",
+          "fileId",
+          "index"
+        ]
+      },
+      "CreateProjectResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Client-generated project id (UUID v4)",
+            "example": "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+          },
+          "signature": {
+            "type": "string",
+            "minLength": 80,
+            "maxLength": 95,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana transaction signature (base58)",
+            "example": "5j7s..."
+          },
+          "programs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectProgramRef"
+            }
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "projectId",
+          "signature",
+          "programs"
+        ]
+      },
+      "CreateProjectProgram": {
+        "type": "object",
+        "properties": {
+          "loanId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^\\d+$",
+            "description": "On-chain loan id (u64 as string)",
+            "example": "42"
+          },
+          "fileId": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 16,
+            "pattern": "^[a-f0-9]{16}$",
+            "example": "0a1b2c3d4e5f6789"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "loanId",
+          "fileId"
+        ]
+      },
+      "CreateProjectBody": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Client-generated project id (UUID v4)",
+            "example": "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+          },
+          "borrower": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 44,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana base58 pubkey",
+            "example": "11111111111111111111111111111111"
+          },
+          "signature": {
+            "type": "string",
+            "minLength": 80,
+            "maxLength": 95,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana transaction signature (base58)",
+            "example": "5j7s..."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "programs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateProjectProgram"
+            },
+            "minItems": 2,
+            "maxItems": 4
+          }
+        },
+        "required": [
+          "projectId",
+          "borrower",
+          "signature",
+          "programs"
+        ]
+      },
+      "ProjectRecord": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Client-generated project id (UUID v4)",
+            "example": "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+          },
+          "borrower": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 44,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana base58 pubkey",
+            "example": "11111111111111111111111111111111"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "signature": {
+            "type": "string",
+            "minLength": 80,
+            "maxLength": 95,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana transaction signature (base58)",
+            "example": "5j7s..."
+          },
+          "programs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectProgramRef"
+            },
+            "minItems": 2,
+            "maxItems": 4
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "projectId",
+          "borrower",
+          "signature",
+          "programs",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "ProjectStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "deploying",
+          "partial",
+          "deployed",
+          "failed"
+        ]
+      },
+      "ProjectProgramStatus": {
+        "type": "object",
+        "properties": {
+          "loanId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^\\d+$",
+            "description": "On-chain loan id (u64 as string)",
+            "example": "42"
+          },
+          "fileId": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 16,
+            "pattern": "^[a-f0-9]{16}$",
+            "example": "0a1b2c3d4e5f6789"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "uploading",
+              "deploying",
+              "deployed",
+              "failed",
+              "repaid",
+              "expired"
+            ]
+          },
+          "deployment": {
+            "$ref": "#/components/schemas/DeploymentRecord"
+          }
+        },
+        "required": [
+          "loanId",
+          "fileId",
+          "index",
+          "status",
+          "deployment"
+        ]
+      },
+      "ProjectAggregateResponse": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectRecord"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus"
+          },
+          "programs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectProgramStatus"
+            }
+          }
+        },
+        "required": [
+          "project",
+          "status",
+          "programs"
+        ]
+      },
+      "ProjectSummary": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectRecord"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus"
+          }
+        },
+        "required": [
+          "project",
+          "status"
+        ]
+      },
+      "PaginatedProjects": {
+        "type": "object",
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectSummary"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projects",
+          "total",
+          "limit",
+          "offset",
+          "hasMore"
+        ]
+      },
+      "ProjectRepaymentResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Client-generated project id (UUID v4)",
+            "example": "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+          },
+          "programs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "loanId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 20,
+                  "pattern": "^\\d+$",
+                  "description": "On-chain loan id (u64 as string)",
+                  "example": "42"
+                },
+                "auth": {
+                  "type": "string",
+                  "minLength": 32,
+                  "maxLength": 44,
+                  "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+                  "description": "Solana base58 pubkey",
+                  "example": "11111111111111111111111111111111"
+                }
+              },
+              "required": [
+                "loanId",
+                "auth"
+              ]
+            }
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "projectId",
+          "programs"
+        ]
+      },
+      "CreateProjectRepaymentBody": {
+        "type": "object",
+        "properties": {
+          "signature": {
+            "type": "string",
+            "minLength": 80,
+            "maxLength": 95,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana transaction signature (base58)",
+            "example": "5j7s..."
+          },
+          "borrower": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 44,
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Solana base58 pubkey",
+            "example": "11111111111111111111111111111111"
+          }
+        },
+        "required": [
+          "signature",
+          "borrower"
+        ]
       }
     },
     "parameters": {}
@@ -1029,6 +1441,191 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PaginatedDeployments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects": {
+      "post": {
+        "summary": "Record a bundled multi-program loan request",
+        "description": "Called by the borrower after they signed ONE transaction containing N (2–4) `request_loan` instructions. Validates each fileId belongs to the borrower, stores the off-chain grouping, then kicks off each program deployment independently. The client-supplied `projectId` (UUID) makes a re-POST idempotent. Does not replace POST /v1/loans (used for single-program borrows).",
+        "tags": [
+          "projects"
+        ],
+        "security": [
+          {
+            "solignitionAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Project recorded; per-program deployments will begin asynchronously",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateProjectResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List projects (paginated)",
+        "description": "Filter by borrower. Default limit 50, max 200. Authenticated callers may only list their own projects. Each entry carries a lightweight aggregate status (no per-program deployment records — fetch GET /v1/projects/:projectId for those).",
+        "tags": [
+          "projects"
+        ],
+        "security": [
+          {
+            "solignitionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 44,
+              "pattern": "^[1-9A-HJ-NP-Za-km-z]+$",
+              "description": "Solana base58 pubkey",
+              "example": "11111111111111111111111111111111"
+            },
+            "required": false,
+            "name": "borrower",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of projects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedProjects"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{projectId}": {
+      "get": {
+        "summary": "Get a project with aggregate + per-program status",
+        "description": "Aggregates the per-program deployment records into one project status (pending | deploying | partial | deployed | failed) and returns each program enriched with its own loan status + deployment record.",
+        "tags": [
+          "projects"
+        ],
+        "security": [
+          {
+            "solignitionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Client-generated project id (UUID v4)",
+              "example": "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project aggregate",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregateResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{projectId}/repayments": {
+      "post": {
+        "summary": "Record a bundled multi-program repayment",
+        "description": "Called after the borrower signed ONE transaction containing N `repay_loan` instructions. The deployer transfers each deployed program authority back to the borrower, one program at a time and independently. loanIds are read from the stored project.",
+        "tags": [
+          "projects"
+        ],
+        "security": [
+          {
+            "solignitionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Client-generated project id (UUID v4)",
+              "example": "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRepaymentBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Repayment recorded; per-program authority transfers scheduled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRepaymentResponse"
                 }
               }
             }

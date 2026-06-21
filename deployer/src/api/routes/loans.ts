@@ -28,7 +28,7 @@ import type { DeploymentRecord } from './types';
  * loans the borrower failed to repay; `pending` covers both "no deployment
  * record yet" and the deployer-side pending state.
  */
-function loanStatusFor(d: DeploymentRecord | null): {
+export function loanStatusFor(d: DeploymentRecord | null): {
   status: 'pending' | 'uploading' | 'deploying' | 'deployed' | 'failed' | 'repaid' | 'expired';
   updatedAt: number | null;
 } {

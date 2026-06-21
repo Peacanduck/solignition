@@ -26,6 +26,7 @@ import { registerJobRoutes } from '../src/api/routes/jobs';
 import { registerLoanRoutes } from '../src/api/routes/loans';
 import { registerUploadRoutes } from '../src/api/routes/uploads';
 import { registerDeploymentRoutes } from '../src/api/routes/deployments';
+import { registerProjectRoutes } from '../src/api/routes/projects';
 import type { RouteDeps } from '../src/api/routes/types';
 
 // Silence the logger -- this script is supposed to print JSON to stdout only.
@@ -68,6 +69,7 @@ registerJobRoutes(app, stubDeps);
 registerLoanRoutes(app, stubDeps);
 registerUploadRoutes(app, stubDeps);
 registerDeploymentRoutes(app, stubDeps);
+registerProjectRoutes(app, stubDeps);
 
 // Touch the registry to make sure it isn't empty (paranoia: catches the
 // "registrars were no-ops" failure mode early).
