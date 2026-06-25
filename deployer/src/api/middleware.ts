@@ -33,7 +33,7 @@ export function buildRateLimiters(): RateLimiters {
   return {
     uploadIp: rateLimit({
       windowMs: 60 * 60 * 1000, // 1h
-      max: 5,
+      max: 10,
       standardHeaders: true,
       legacyHeaders: false,
       keyGenerator: ipKey,
@@ -41,7 +41,7 @@ export function buildRateLimiters(): RateLimiters {
     }),
     uploadPubkey: rateLimit({
       windowMs: 60 * 60 * 1000,
-      max: 10,
+      max: 15,
       standardHeaders: true,
       legacyHeaders: false,
       keyGenerator: pubkeyKey,
