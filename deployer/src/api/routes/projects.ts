@@ -33,6 +33,7 @@ import {
 import { route } from '../route-wrapper';
 import { registry as openapi } from '../openapi';
 import { loanStatusFor } from './loans';
+import { buildPendingDeployment } from './deployment-record';
 import type { ProjectProgramRef, ProjectRecord, RouteDeps } from './types';
 
 type ProgramLoanStatus = ReturnType<typeof loanStatusFor>['status'];
@@ -204,6 +205,21 @@ export function registerProjectRoutes(app: Application, deps: RouteDeps): void {
           programCount: refs.length,
           reqId: req.id,
         });
+
+        // Persist each program's loan→binary link durably BEFORE scheduling the
+        // async deploys, so a restart in the window can be recovered by the
+        // on-chain reconciliation loop. Guarded so a re-POST never downgrades an
+        // advanced record.
+        await Promise.all(
+          refs.map(async (ref, i) => {
+            const existing = await deps.stateManager.getDeployment(ref.loanId);
+            if (!existing) {
+              await deps.stateManager.saveDeployment(
+                buildPendingDeployment(ref.loanId, borrower, fileUploads[i]),
+              );
+            }
+          }),
+        );
 
         // Process each program independently — one failing must not block the
         // others. Same 2s delay + per-call .catch as POST /v1/loans.

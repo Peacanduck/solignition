@@ -40,6 +40,7 @@ import { registerLoanRoutes } from './api/routes/loans';
 import { registerUploadRoutes } from './api/routes/uploads';
 import { registerDeploymentRoutes } from './api/routes/deployments';
 import { registerProjectRoutes } from './api/routes/projects';
+import { buildPendingDeployment } from './api/routes/deployment-record';
 import type { RouteDeps } from './api/routes/types';
 
 // Load environment variables
@@ -62,6 +63,10 @@ interface DeployerConfig {
   maxRetries: number;
   retryDelayMs: number;
   pollIntervalMs: number;
+  /** How often the deploy/auth-transfer reconciliation sweeps run. Default 10 min. */
+  reconcileIntervalMs: number;
+  /** Delay before the first reconciliation sweep after boot. Default 20s. */
+  reconcileInitialDelayMs: number;
   cluster: 'devnet' | 'testnet' | 'mainnet-beta' | 'localnet';
   graphqlEndpoint: string;
   solanaCliPath?: string;
@@ -87,6 +92,9 @@ const config: DeployerConfig = {
   maxRetries: parseInt(process.env.MAX_RETRIES || '3'),
   retryDelayMs: parseInt(process.env.RETRY_DELAY_MS || '5000'),
   pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS || '5000'),
+  reconcileIntervalMs: parseInt(process.env.RECONCILE_INTERVAL_MS || '600000'), // 10 min
+  reconcileInitialDelayMs: parseInt(process.env.RECONCILE_INITIAL_DELAY_MS || '20000'), // 20s
+
   cluster: (process.env.CLUSTER as any) || 'localnet',
   graphqlEndpoint: process.env.GRAPHQL_ENDPOINT || 'http://127.0.0.1:18488/subgraphs',
   solanaCliPath: process.env.SOLANA_CLI_PATH || 'solana',
@@ -544,6 +552,11 @@ async getProjectsPage(opts: {
 }
 
 // ============ Binary Management ============
+// NOTE: binaries are stored on the VM's local disk (`config.binaryStoragePath`,
+// default ./binaries) with no retention/cleanup, and survive a process restart
+// but not VM loss. This is NOT long-term durable storage — see the
+// "Reliability & storage" section in deployer/README.md for the limitation and
+// the recommended object-storage follow-up.
 class BinaryManager {
   private storagePath: string;
   private uploadPath: string;
@@ -1283,16 +1296,37 @@ class DeployerOrchestrator {
   private pendingAuthTransferInterval: NodeJS.Timeout | null = null;
   private pendingLoansDeploymentInterval: NodeJS.Timeout | null = null;
 
+  // Loan ids whose deploy is in flight THIS uptime. The deploy step isn't
+  // idempotent (each run mints a new program account), so this is the lock that
+  // stops the in-memory setTimeout path and the reconciliation loop from
+  // deploying the same loan twice. On boot it's empty by definition, so any
+  // record left persisted in 'deploying' is known-orphaned and gets resumed
+  // immediately. (A time-based staleness check would be the basis for a future
+  // multi-worker setup; the in-flight set is the primary mechanism today.)
+  private deployingLoanIds = new Set<string>();
+
+  /** Returns false if a deploy for this loan is already in flight this uptime. */
+  private claimDeploy(loanId: string): boolean {
+    if (this.deployingLoanIds.has(loanId)) return false;
+    this.deployingLoanIds.add(loanId);
+    return true;
+  }
+
+  private releaseDeploy(loanId: string): void {
+    this.deployingLoanIds.delete(loanId);
+  }
+
   private startPendingLoansDeploymentChecker(): void {
-  const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 10 minutes
-  
-  // Initial check after 1 minute
+  const CHECK_INTERVAL_MS = config.reconcileIntervalMs;
+
+  // Initial sweep shortly after boot so a restart resumes accepted-but-
+  // unprocessed (and orphaned 'deploying') deploys quickly.
   setTimeout(() => {
-    this.checkPendingLoansForDeployment().catch(error => 
+    this.checkPendingLoansForDeployment().catch(error =>
       logger.error('Error in initial pending loans deployment check', { error })
     );
-  }, 60000);
-  
+  }, config.reconcileInitialDelayMs);
+
   this.pendingLoansDeploymentInterval = setInterval(async () => {
     try {
       await this.checkPendingLoansForDeployment();
@@ -1300,7 +1334,7 @@ class DeployerOrchestrator {
       logger.error('Error in periodic pending loans deployment check', { error });
     }
   }, CHECK_INTERVAL_MS);
-  
+
   logger.info(`Started pending loans deployment checker with interval: ${CHECK_INTERVAL_MS}ms`);
 }
 
@@ -1361,7 +1395,11 @@ public async checkPendingLoansForDeployment(): Promise<void> {
           
           
           if (!deployment) {
-            logger.debug('No deployment record found for pending loan', { loanId });
+            // Should be rare now that the loan/project route persists a pending
+            // record up front. If it happens, the loan→binary link was never
+            // recorded (e.g. a loan created out-of-band), so there's nothing to
+            // deploy from here.
+            logger.warn('No deployment record found for pending loan', { loanId });
             continue;
           }
           logger.info('program account open', deployment.programAccountOpen);
@@ -1375,19 +1413,16 @@ public async checkPendingLoansForDeployment(): Promise<void> {
           const isExpired = nowSec > expirySec;
 
           if (!deployment.programAccountOpen && !isExpired) {
-            logger.debug('Deployment record exists but no programId', {
-              loanId,
+            // Resume an unfinished deploy: a fresh accept that hasn't been
+            // processed yet, or one orphaned in 'deploying' by a restart.
+            // processDeploymentWithRetries claims the loan (skips if already in
+            // flight this uptime or already 'deployed') and owns the status
+            // transitions, so we don't set status here.
+            logger.info('Resuming deploy for pending loan', {
+              loanId: deployment.loanId,
               deploymentStatus: deployment.status,
             });
-            // TODO try to deploy program 
-            logger.info('attempting to deploy', deployment.loanId);
-            //check if loan expired 
-            await this.processDeployment(deployment);
-
-            deployment.status = 'deployed';
-            deployment.updatedAt = Date.now();
-            await this.stateManager.saveDeployment(deployment);
-
+            await this.processDeploymentWithRetries(deployment);
             continue;
           }
           
@@ -2032,33 +2067,51 @@ private async callReturnReclaimedSol(
 
 
   public async processDeploymentWithRetries(deployment: DeploymentRecord): Promise<void> {
-    let attempts = 0;
+    const { loanId } = deployment;
 
-    while (attempts < config.maxRetries) {
-     if(deployment.status != 'deployed'){
-      try {
-        await this.processDeployment(deployment);
-        return;
-      } catch (error) {
-        attempts++;
-        logger.error(`Deployment attempt ${attempts} failed`, {
-          loanId: deployment.loanId,
-          error,
-        });
+    // Re-read the persisted status (the in-memory `deployment` may be stale);
+    // nothing to do if it already finished.
+    const latest = await this.stateManager.getDeployment(loanId);
+    if (latest?.status === 'deployed') {
+      logger.info('Deployment already completed, skipping', { loanId });
+      return;
+    }
 
-        if (attempts >= config.maxRetries) {
-          deployment.status = 'failed';
-          deployment.error = String(error);
-          await this.stateManager.saveDeployment(deployment);
-          metrics.deploymentsTotal.inc({ status: 'failed' });
+    // Single-process mutual exclusion: never run two deploys for one loan.
+    if (!this.claimDeploy(loanId)) {
+      logger.info('Deployment already in flight, skipping', { loanId });
+      return;
+    }
+
+    try {
+      let attempts = 0;
+      while (attempts < config.maxRetries) {
+        try {
+          await this.processDeployment(deployment);
           return;
-        }
+        } catch (error) {
+          attempts++;
+          logger.error(`Deployment attempt ${attempts} failed`, {
+            loanId,
+            error,
+          });
 
-        await new Promise(resolve => 
-          setTimeout(resolve, config.retryDelayMs * Math.pow(2, attempts - 1))
-        );
+          if (attempts >= config.maxRetries) {
+            deployment.status = 'failed';
+            deployment.error = String(error);
+            deployment.updatedAt = Date.now();
+            await this.stateManager.saveDeployment(deployment);
+            metrics.deploymentsTotal.inc({ status: 'failed' });
+            return;
+          }
+
+          await new Promise(resolve =>
+            setTimeout(resolve, config.retryDelayMs * Math.pow(2, attempts - 1))
+          );
+        }
       }
-     }
+    } finally {
+      this.releaseDeploy(loanId);
     }
   }
 
@@ -2700,20 +2753,15 @@ class ApiServer {
 
       logger.info('Processing deployment for loan', { loanId, signature, borrower });
 
-      // Create deployment record
-      const deployment: DeploymentRecord = {
-        loanId,
-        borrower,
-        principal: loanAccount.principal,
-        binaryPath: fileUpload.filePath,
-        binaryHash: fileUpload.binaryHash,
-        status: 'pending',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        programAccountOpen: false,
-      };
-
-      await this.stateManager.saveDeployment(deployment);
+      // Upsert the deployment record. The loan/project route already persisted
+      // a `pending` record up front (durability), so normally we reuse it and
+      // must NOT reset an advanced status back to 'pending'. Only build one here
+      // if it's somehow missing.
+      let deployment = await this.stateManager.getDeployment(loanId);
+      if (!deployment) {
+        deployment = buildPendingDeployment(loanId, borrower, fileUpload);
+        await this.stateManager.saveDeployment(deployment);
+      }
 
       // Update file upload status
       fileUpload.status = 'deployed';

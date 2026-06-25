@@ -12,6 +12,28 @@ The **## API** sections below are the contract surface for the deployer service
 
 ## Unreleased
 
+### Reliability — accepted deploys survive a deployer restart
+
+Borrows are accepted (`201`) and deployed asynchronously. Previously the
+loan→binary link existed only in the in-memory `setTimeout` that ran the deploy,
+and the reconciliation sweep skipped any pending loan without a deployment
+record — so a deployer restart/crash in the window before processing **silently
+dropped the deploy** (the program never shipped despite a success response).
+
+Now the `pending` deployment record is persisted **up front** in the
+`POST /v1/loans` and `POST /v1/projects` handlers, before the deploy is
+scheduled. On-chain `pending` loan state is the durable queue; the
+reconciliation sweep deploys (or resumes) any loan with a pending/orphaned
+record. An in-memory in-flight set + the persisted status make deploy processing
+idempotent so the timer path and the sweep can't double-deploy. The sweep cadence
+is now configurable (`RECONCILE_INTERVAL_MS` default 10 min — was a mislabeled
+1h; `RECONCILE_INITIAL_DELAY_MS` default 20s). No request/response shapes changed.
+
+This is internal behavior only — **not** an API-contract change. See
+`deployer/README.md` → "Reliability & storage" for the durability model and the
+documented storage limitations (local-disk binaries with no retention; LevelDB
+single point of failure; object storage / queue called out as future work).
+
 ### API — multi-program project deployments (additive)
 
 New `/v1/projects/*` endpoints let a borrower bundle 2–4 program loans created in

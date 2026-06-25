@@ -21,6 +21,7 @@ import {
   LoanStatusResponse,
 } from '../schemas';
 import type { DeploymentRecord } from './types';
+import { buildPendingDeployment } from './deployment-record';
 
 /**
  * Map the internal DeploymentRecord.status to the public LoanStatus enum.
@@ -181,6 +182,18 @@ export function registerLoanRoutes(app: Application, deps: RouteDeps): void {
           loanId,
           reqId: req.id,
         });
+
+        // Persist the loan→binary link durably BEFORE scheduling the async
+        // deploy. If the process restarts in the window before the timer
+        // fires, the on-chain reconciliation loop can still find this pending
+        // record and deploy it. Guard so a re-POST never downgrades a record
+        // the deploy has already advanced.
+        const existingDeployment = await deps.stateManager.getDeployment(loanId);
+        if (!existingDeployment) {
+          await deps.stateManager.saveDeployment(
+            buildPendingDeployment(loanId, borrower, fileUpload),
+          );
+        }
 
         // Process the loan asynchronously -- give the on-chain tx a moment
         // to be confirmed before we go look for it.
