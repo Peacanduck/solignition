@@ -1483,15 +1483,10 @@
         }
       },
       "get": {
-        "summary": "List projects (paginated)",
-        "description": "Filter by borrower. Default limit 50, max 200. Authenticated callers may only list their own projects. Each entry carries a lightweight aggregate status (no per-program deployment records — fetch GET /v1/projects/:projectId for those).",
+        "summary": "List a borrower’s projects (paginated, public)",
+        "description": "Public. `borrower` is required and scopes the list. Default limit 50, max 200. Each entry carries a lightweight aggregate status (no per-program deployment records — fetch GET /v1/projects/:projectId for those).",
         "tags": [
           "projects"
-        ],
-        "security": [
-          {
-            "solignitionAuth": []
-          }
         ],
         "parameters": [
           {
@@ -1548,15 +1543,10 @@
     },
     "/v1/projects/{projectId}": {
       "get": {
-        "summary": "Get a project with aggregate + per-program status",
-        "description": "Aggregates the per-program deployment records into one project status (pending | deploying | partial | deployed | failed) and returns each program enriched with its own loan status + deployment record.",
+        "summary": "Get a project with aggregate + per-program status (public)",
+        "description": "Public, keyed by the unguessable project UUID. Aggregates the per-program deployment records into one project status (pending | deploying | partial | deployed | failed) and returns each program enriched with its own loan status + deployment record. No auth so clients can poll live deploy progress.",
         "tags": [
           "projects"
-        ],
-        "security": [
-          {
-            "solignitionAuth": []
-          }
         ],
         "parameters": [
           {

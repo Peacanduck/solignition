@@ -90,14 +90,11 @@ export function useRepayProjectMutation({ account }: { account: UiWalletAccount 
 
       try {
         const notifyBody = JSON.stringify({ signature, borrower: account.address })
-        const notifyResponse = await fetchSigned(
-          `${DEPLOYER_API_URL}/v1/projects/${projectId}/repayments`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: notifyBody,
-          },
-        )
+        const notifyResponse = await fetchSigned(`${DEPLOYER_API_URL}/v1/projects/${projectId}/repayments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: notifyBody,
+        })
 
         if (!notifyResponse.ok) {
           const errorData = await notifyResponse.json()

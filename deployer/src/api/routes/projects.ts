@@ -235,14 +235,18 @@ export function registerProjectRoutes(app: Application, deps: RouteDeps): void {
   );
 
   // ── GET /v1/projects/:projectId ───────────────────────────────────────
+  // PUBLIC (no auth): a status read keyed by an unguessable client UUID — a
+  // capability URL. The data it exposes (deploy status, on-chain program ids)
+  // is no more sensitive than the loans, which are already public on-chain.
+  // Public so the frontend can poll live deploy progress without prompting the
+  // wallet to sign on every poll.
   openapi.registerPath({
     method: 'get',
     path: '/v1/projects/{projectId}',
-    summary: 'Get a project with aggregate + per-program status',
+    summary: 'Get a project with aggregate + per-program status (public)',
     description:
-      'Aggregates the per-program deployment records into one project status (pending | deploying | partial | deployed | failed) and returns each program enriched with its own loan status + deployment record.',
+      'Public, keyed by the unguessable project UUID. Aggregates the per-program deployment records into one project status (pending | deploying | partial | deployed | failed) and returns each program enriched with its own loan status + deployment record. No auth so clients can poll live deploy progress.',
     tags: ['projects'],
-    security: [{ solignitionAuth: [] }],
     request: { params: ProjectIdParam },
     responses: {
       200: {
@@ -254,14 +258,11 @@ export function registerProjectRoutes(app: Application, deps: RouteDeps): void {
   app.get(
     '/v1/projects/:projectId',
     deps.rateLimit.getIp,
-    deps.authMw('GET /v1/projects/:projectId'),
-    deps.rateLimit.getPubkey,
     route(
       { params: ProjectIdParam, response: ProjectAggregateResponse },
-      async ({ params, req }) => {
+      async ({ params }) => {
         const project = await deps.stateManager.getProject(params.projectId);
         if (!project) throw httpError.notFound('Project not found', 'project_not_found');
-        assertAuthMatches(req, project.borrower, 'GET /v1/projects/:projectId', deps.logger);
 
         const enriched = await statusesFor(deps, project.programs);
         return {
@@ -281,14 +282,16 @@ export function registerProjectRoutes(app: Application, deps: RouteDeps): void {
   );
 
   // ── GET /v1/projects?borrower=…&limit=…&offset=… ──────────────────────
+  // PUBLIC (no auth): `borrower` is required and scopes the list. The grouping
+  // joins loans that are already public on-chain; public so the dashboard can
+  // load groupings without prompting the wallet to sign.
   openapi.registerPath({
     method: 'get',
     path: '/v1/projects',
-    summary: 'List projects (paginated)',
+    summary: 'List a borrower’s projects (paginated, public)',
     description:
-      'Filter by borrower. Default limit 50, max 200. Authenticated callers may only list their own projects. Each entry carries a lightweight aggregate status (no per-program deployment records — fetch GET /v1/projects/:projectId for those).',
+      'Public. `borrower` is required and scopes the list. Default limit 50, max 200. Each entry carries a lightweight aggregate status (no per-program deployment records — fetch GET /v1/projects/:projectId for those).',
     tags: ['projects'],
-    security: [{ solignitionAuth: [] }],
     request: { query: ProjectListQuery },
     responses: {
       200: {
@@ -300,22 +303,12 @@ export function registerProjectRoutes(app: Application, deps: RouteDeps): void {
   app.get(
     '/v1/projects',
     deps.rateLimit.getIp,
-    deps.authMw('GET /v1/projects'),
-    deps.rateLimit.getPubkey,
     route(
       { query: ProjectListQuery, response: PaginatedProjects },
-      async ({ query, req }) => {
+      async ({ query }) => {
         const { limit, offset, borrower } = query;
-        if (req.authPubkey) {
-          if (!borrower) {
-            throw httpError.badRequest('borrower query parameter is required', 'borrower_required');
-          }
-          if (borrower !== req.authPubkey) {
-            throw httpError.forbidden(
-              'borrower does not match authenticated pubkey',
-              'authz_mismatch',
-            );
-          }
+        if (!borrower) {
+          throw httpError.badRequest('borrower query parameter is required', 'borrower_required');
         }
 
         const page = await deps.stateManager.getProjectsPage({ borrower, limit, offset });

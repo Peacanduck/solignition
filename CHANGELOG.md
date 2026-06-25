@@ -24,8 +24,8 @@ project.
 | Method | Path | Notes |
 | --- | --- | --- |
 | `POST` | `/v1/projects` | 201. Body `{projectId (client UUID), borrower, signature, name?, programs:[{loanId, fileId, name?}]×2..4}`. Validates each `fileId` belongs to the borrower, stores the grouping, then schedules each program's deployment independently. Re-POST with the same `projectId` is idempotent; a different borrower on an existing id returns **409 `project_conflict`**. |
-| `GET` | `/v1/projects/:projectId` | 200. Aggregate `status` (`pending \| deploying \| partial \| deployed \| failed`) derived from the per-program deployment records, plus each program enriched with its own loan status + deployment record. |
-| `GET` | `/v1/projects?borrower=…&limit=…&offset=…` | 200. Paginated list with the same `{…, total, limit, offset, hasMore}` envelope as deployments; each entry carries the lightweight aggregate status only. Authenticated callers may only list their own projects. |
+| `GET` | `/v1/projects/:projectId` | 200. **Public** (no auth — keyed by the unguessable project UUID, a capability URL) so clients can poll live deploy progress without a wallet signature per poll. Aggregate `status` (`pending \| deploying \| partial \| deployed \| failed`) derived from the per-program deployment records, plus each program enriched with its own loan status + deployment record. |
+| `GET` | `/v1/projects?borrower=…&limit=…&offset=…` | 200. **Public** (no auth); `borrower` is required and scopes the list. Same `{…, total, limit, offset, hasMore}` envelope as deployments; each entry carries the lightweight aggregate status only. Reads expose nothing beyond the already-public on-chain loans. |
 | `POST` | `/v1/projects/:projectId/repayments` | 201. Body `{signature, borrower}`. Fans out one `transferDeployedProgramAuth` per program, each scheduled and `.catch`-wrapped independently. |
 
 Per-program side effects are individually error-isolated, so one program

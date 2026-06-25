@@ -1,7 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import type { UiWalletAccount } from '@wallet-ui/react'
 import { useSolana } from '@/components/solana/use-solana'
-import { useFetchSigned } from '@/lib/fetch-signed'
 
 const DEPLOYER_API_URL = import.meta.env.VITE_DEPLOYER_API_URL || 'http://localhost:3000'
 
@@ -9,14 +7,7 @@ const DEPLOYER_API_URL = import.meta.env.VITE_DEPLOYER_API_URL || 'http://localh
 export type ProjectStatus = 'pending' | 'deploying' | 'partial' | 'deployed' | 'failed'
 
 /** Per-program loan lifecycle status, mirrors the deployer's `LoanStatus`. */
-export type ProgramLoanStatus =
-  | 'pending'
-  | 'uploading'
-  | 'deploying'
-  | 'deployed'
-  | 'failed'
-  | 'repaid'
-  | 'expired'
+export type ProgramLoanStatus = 'pending' | 'uploading' | 'deploying' | 'deployed' | 'failed' | 'repaid' | 'expired'
 
 export interface ProjectDeploymentRecord {
   loanId: string
@@ -66,21 +57,16 @@ const LIVE_STATUSES: ReadonlySet<ProjectStatus> = new Set(['pending', 'deploying
  * once it reaches a terminal `deployed` or `failed`. Pass `projectId: null` to
  * disable (e.g. single-program borrows).
  */
-export function useProject({
-  account,
-  projectId,
-}: {
-  account: UiWalletAccount
-  projectId: string | null
-}) {
+export function useProject({ projectId }: { projectId: string | null }) {
   const { cluster } = useSolana()
-  const fetchSigned = useFetchSigned(account)
 
   return useQuery({
     queryKey: ['project', { cluster: cluster.id }, projectId],
     enabled: !!projectId,
     queryFn: async (): Promise<ProjectAggregate | null> => {
-      const response = await fetchSigned(`${DEPLOYER_API_URL}/v1/projects/${projectId}`)
+      // Public endpoint (keyed by the unguessable project UUID) — no wallet
+      // signature, so we can poll live deploy progress without prompting.
+      const response = await fetch(`${DEPLOYER_API_URL}/v1/projects/${projectId}`)
       if (!response.ok) {
         if (response.status === 404) return null
         throw new Error('Failed to fetch project')

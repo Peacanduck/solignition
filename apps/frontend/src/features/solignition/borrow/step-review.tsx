@@ -6,7 +6,7 @@ import { useProtocolConfig } from '../data-access/use-protocol-config'
 import { formatSOL, shortAddr } from '../lib/format'
 import {
   computeInterest,
-  computePrincipal,
+  sumPrincipal,
   type WizardAction,
   type WizardState,
 } from './use-borrow-wizard'
@@ -23,8 +23,9 @@ export function StepReview({
 }) {
   const configQuery = useProtocolConfig()
   const adminFeeBps = configQuery.data?.data.defaultAdminFeeBps ?? 0
-  const rent = state.estimatedRent ?? 0n
-  const { principal } = computePrincipal(rent, adminFeeBps)
+  const programCount = state.programs.length
+  const isProject = programCount > 1
+  const principal = sumPrincipal(state.programs, adminFeeBps)
   const interest = computeInterest(principal, state.interestRateBps, state.duration)
   const totalOwed = principal + interest
 
@@ -39,10 +40,19 @@ export function StepReview({
   })
   const ratePct = (state.interestRateBps / 100).toFixed(1)
 
+  // One row per program file (a single-program borrow shows exactly one).
+  const programRows: [string, string, 'accent' | 'muted' | undefined][] = state.programs.map(
+    (slot, i) => [
+      isProject ? `program ${i + 1}${slot.name ? ` · ${slot.name}` : ''}` : 'program file',
+      `${slot.file?.name ?? '—'} · ${slot.file ? (slot.file.size / 1024).toFixed(0) : '—'} KB`,
+      undefined,
+    ],
+  )
+
   const summary: [string, string, 'accent' | 'muted' | undefined][] = [
-    ['program file', `${state.file?.name ?? '—'} · ${state.file ? (state.file.size / 1024).toFixed(0) : '—'} KB`, undefined],
+    ...programRows,
     ['borrower', `${shortAddr(account.address)} (you)`, undefined],
-    ['principal', `${formatSOL(principal, 4)} SOL`, 'accent'],
+    [isProject ? `principal · ${programCount} loans` : 'principal', `${formatSOL(principal, 4)} SOL`, 'accent'],
     ['interest rate', `${ratePct}% APR`, undefined],
     ['duration', `${state.duration} days`, undefined],
     ['expires', expires, undefined],
@@ -120,7 +130,20 @@ export function StepReview({
             transaction preview
           </div>
           <pre className="overflow-x-auto rounded bg-secondary p-3 font-mono text-[11px] leading-relaxed">
-{`Instruction: RequestLoan
+{isProject
+  ? `Transaction: 1 signature
+Instructions: ${programCount} × RequestLoan
+  [w] borrower    ${shortAddr(account.address)}
+  [w] config      <protocol config PDA>
+  [w] loan        <derived loan PDA × ${programCount}>
+  [r] deployer    <protocol deployer>
+  [r] system      111...
+Args (per loan):
+  duration        ${BigInt(state.duration * 86400).toString()} seconds
+  rate_bps        ${state.interestRateBps}
+  admin_fee_bps   ${adminFeeBps}
+Total principal   ${principal.toString()} lamports`
+  : `Instruction: RequestLoan
 Accounts:
   [w] borrower    ${shortAddr(account.address)}
   [w] config      <protocol config PDA>
