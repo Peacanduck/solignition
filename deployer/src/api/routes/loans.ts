@@ -276,7 +276,11 @@ export function registerLoanRoutes(app: Application, deps: RouteDeps): void {
             }
             const borrowerPubkey = new PublicKey(borrower);
             const tx = await orchestrator.transferDeployedProgramAuth(loanId, borrowerPubkey);
-            deps.logger.info('loans.repay.transfer_complete', { loanId, borrower, tx });
+            if (tx) {
+              deps.logger.info('loans.repay.transfer_complete', { loanId, borrower, tx });
+            } else {
+              deps.logger.info('loans.repay.transfer_skipped', { loanId, borrower });
+            }
           } catch (err) {
             deps.logger.error('loans.repay.transfer_failed', {
               loanId,

@@ -124,7 +124,8 @@ export interface BinaryManagerLike {
 
 export interface OrchestratorLike {
   checkExpiredLoans(): Promise<void>;
-  transferDeployedProgramAuth(loanId: string, borrowerPubkey: PublicKey): Promise<string>;
+  /** Resolves to the transfer tx signature, or `null` if the loan wasn't awaiting transfer (already done / not eligible). */
+  transferDeployedProgramAuth(loanId: string, borrowerPubkey: PublicKey): Promise<string | null>;
   processDeploymentWithRetries(deployment: DeploymentRecord): Promise<void>;
 }
 

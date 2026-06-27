@@ -1588,13 +1588,20 @@ public async checkPendingAuthTransfers(): Promise<void> {
           try {
             logger.info('Processing auth transfer for loan', { loanId });
             const tx = await this.transferDeployedProgramAuth(loanId, loan.borrower);
-            
-            logger.info('Auth transfer completed successfully', {
-              loanId,
-              borrower: loan.borrower.toString(),
-              tx,
-            });
-            
+
+            if (tx) {
+              logger.info('Auth transfer completed successfully', {
+                loanId,
+                borrower: loan.borrower.toString(),
+                tx,
+              });
+            } else {
+              logger.info('Auth transfer skipped — loan not awaiting transfer', {
+                loanId,
+                borrower: loan.borrower.toString(),
+              });
+            }
+
             processedCount++;
             
             // Add a small delay between transfers to avoid rate limiting
@@ -2207,7 +2214,7 @@ private async callReturnReclaimedSol(
 
   }
 
-  public async transferDeployedProgramAuth(loanId: string | number, borrower: PublicKey): Promise<string> {
+  public async transferDeployedProgramAuth(loanId: string | number, borrower: PublicKey): Promise<string | null> {
     try {
       const loanIdBn = new anchor.BN(loanId.toString());
 
@@ -2264,8 +2271,17 @@ private async callReturnReclaimedSol(
       const isRepaid = ['repaidPendingTransfer'].includes(stateKey);
       logger.info(`loan Info: {0}`, stateKey);
 
-      if(!isRepaid){
-        throw new Error(`Loan state: ${loanInfo.state} loan needs to be repaid first`);
+      if (!isRepaid) {
+        // The loan isn't in `repaidPendingTransfer` — e.g. it was already repaid
+        // and its authority transferred individually before a project-wide repay
+        // reached it. Nothing to transfer; skip gracefully (return null) rather
+        // than throwing, so the project repay fan-out doesn't log a scary error
+        // for a loan that's already done.
+        logger.info('Auth transfer skipped — loan not awaiting transfer', {
+          loanId,
+          state: stateKey,
+        });
+        return null;
       }
       
       const [programData] = PublicKey.findProgramAddressSync([loanInfo.programPubkey.toBuffer()], BPF_UPGRADEABLE_LOADER);

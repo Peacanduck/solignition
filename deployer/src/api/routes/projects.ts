@@ -415,12 +415,21 @@ export function registerProjectRoutes(app: Application, deps: RouteDeps): void {
                 return;
               }
               const tx = await orchestrator.transferDeployedProgramAuth(ref.loanId, borrowerPubkey);
-              deps.logger.info('projects.repay.transfer_complete', {
-                projectId,
-                loanId: ref.loanId,
-                borrower,
-                tx,
-              });
+              if (tx) {
+                deps.logger.info('projects.repay.transfer_complete', {
+                  projectId,
+                  loanId: ref.loanId,
+                  borrower,
+                  tx,
+                });
+              } else {
+                // Loan wasn't awaiting transfer (e.g. already repaid individually).
+                deps.logger.info('projects.repay.transfer_skipped', {
+                  projectId,
+                  loanId: ref.loanId,
+                  borrower,
+                });
+              }
             } catch (err) {
               deps.logger.error('projects.repay.transfer_failed', {
                 projectId,
