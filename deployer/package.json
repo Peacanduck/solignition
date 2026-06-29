@@ -10,7 +10,7 @@
     "check-idl": "node check-idl.js",
     "openapi:gen": "ts-node scripts/generate-openapi.ts",
     "openapi:check": "ts-node scripts/generate-openapi.ts - > /tmp/openapi-new.json && diff -u openapi.json /tmp/openapi-new.json",
-    "test": "node -r ts-node/register --test 'src/tests/unit/**/*.test.ts'"
+    "test": "node -r ts-node/register --test src/tests/unit/*.test.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.3.0",
