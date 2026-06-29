@@ -54,6 +54,30 @@ export interface DeploymentRecord {
   programAccountOpen: boolean;
 }
 
+/**
+ * Off-chain grouping metadata that bundles 2–4 program loans into one
+ * "project". The DeploymentRecord per loanId stays the single source of truth
+ * for deploy status; ProjectRecord only records the grouping. `index` is each
+ * program's position (0..N-1), matching its `request_loan` instruction order in
+ * the bundled transaction.
+ */
+export interface ProjectProgramRef {
+  loanId: string;
+  fileId: string;
+  index: number;
+  name?: string;
+}
+
+export interface ProjectRecord {
+  projectId: string;
+  borrower: string;
+  name?: string;
+  signature: string;
+  programs: ProjectProgramRef[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface StateManagerLike {
   getDeployment(loanId: string): Promise<DeploymentRecord | null>;
   saveDeployment(record: DeploymentRecord): Promise<void>;
@@ -79,6 +103,15 @@ export interface StateManagerLike {
     limit: number;
     offset: number;
   }): Promise<{ deployments: DeploymentRecord[]; total: number; hasMore: boolean }>;
+  // ── Projects (multi-program grouping) ──
+  getProject(projectId: string): Promise<ProjectRecord | null>;
+  saveProject(record: ProjectRecord): Promise<void>;
+  /** Paginated, cap-bounded list of projects (mirrors getDeploymentsPage). */
+  getProjectsPage(opts: {
+    borrower?: string;
+    limit: number;
+    offset: number;
+  }): Promise<{ projects: ProjectRecord[]; total: number; hasMore: boolean }>;
 }
 
 export interface BinaryManagerLike {
@@ -91,7 +124,8 @@ export interface BinaryManagerLike {
 
 export interface OrchestratorLike {
   checkExpiredLoans(): Promise<void>;
-  transferDeployedProgramAuth(loanId: string, borrowerPubkey: PublicKey): Promise<string>;
+  /** Resolves to the transfer tx signature, or `null` if the loan wasn't awaiting transfer (already done / not eligible). */
+  transferDeployedProgramAuth(loanId: string, borrowerPubkey: PublicKey): Promise<string | null>;
   processDeploymentWithRetries(deployment: DeploymentRecord): Promise<void>;
 }
 

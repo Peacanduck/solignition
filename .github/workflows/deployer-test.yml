@@ -1,0 +1,40 @@
+name: Deployer tests
+
+# Runs the deployer's node:test unit suite (status aggregation, loan-status
+# mapping, zod schemas, solignition-auth-v1 verification, StateManager paging)
+# on PRs that touch the deployer and on pushes to main. No new dependencies —
+# the runner is Node's built-in `--test` via ts-node/register.
+
+on:
+  pull_request:
+    paths:
+      - 'deployer/src/**'
+      - 'deployer/package.json'
+      - 'deployer/package-lock.json'
+      - '.github/workflows/deployer-test.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deployer/src/**'
+      - 'deployer/package.json'
+      - 'deployer/package-lock.json'
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: deployer/package-lock.json
+
+      - name: install deployer deps
+        working-directory: deployer
+        run: npm ci --no-audit --no-fund
+
+      - name: unit tests
+        working-directory: deployer
+        run: npm test

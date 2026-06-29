@@ -203,6 +203,50 @@ The service validates binaries before deployment:
 - Optional: Static analysis for malicious code
 - Hash verification against on-chain records
 
+## Reliability & storage
+
+### Restart durability (deploys resume after a restart)
+
+Accepting a borrow returns `201` immediately and the actual deploy runs in the
+background. To make that durable, the loan→binary link is persisted as a
+`pending` deployment record **before** the deploy is scheduled (in the
+`POST /v1/loans` and `POST /v1/projects` handlers). On-chain loan state is the
+work queue: the reconciliation sweep `checkPendingLoansForDeployment` finds
+loans that are still on-chain `pending` and deploys (or resumes) them from their
+record. So a deployer restart/crash — including during a deploy — does not drop
+an accepted deploy; the next sweep picks it up.
+
+- The deploy step is **not** idempotent (each run mints a new program account),
+  so an in-memory in-flight set + the persisted `status` prevent the in-memory
+  timer and the reconciliation sweep from double-deploying one loan. On boot the
+  set is empty, so any record left in `deploying` is known-orphaned and resumed.
+- Repayment → authority transfer is recovered the same way off on-chain
+  `RepaidPendingTransfer` state (`checkPendingAuthTransfers`).
+- Sweep cadence is configurable: `RECONCILE_INTERVAL_MS` (default `600000` = 10
+  min) and `RECONCILE_INITIAL_DELAY_MS` (default `20000` = first sweep 20s after
+  boot).
+
+### Known limitation — NOT designed for long-term durable storage
+
+This service stores everything on the **VM's local disk** and is a single
+instance:
+
+- **Binaries** live at `BINARY_STORAGE_PATH` (default `./binaries`) as
+  `{fileId}_{hash}.so`. They survive a process (pm2) restart but **not VM loss**,
+  and there is **no retention/cleanup** — they accumulate until an explicit
+  `DELETE /v1/uploads/:fileId`. Long-running instances will grow disk unbounded.
+- **All off-chain state** (deployments, projects, uploads) is in a local LevelDB
+  at `DB_PATH` (default `./deployer-state`) on that same disk — a single point of
+  failure, not backed up.
+
+**Recommended follow-ups (not yet implemented):**
+- Move binaries to durable object storage (S3 / Azure Blob) + a retention policy
+  (e.g. purge binaries for repaid/recovered/expired loans).
+- Back up or externalize the LevelDB state.
+- A real job queue (Redis/BullMQ) is only worth it when scaling off the single VM
+  or to multiple deploy workers; today the on-chain-state-driven reconciliation
+  is the durable queue and needs no extra infrastructure.
+
 ## Monitoring
 
 ### Health & spec endpoints

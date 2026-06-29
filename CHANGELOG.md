@@ -12,6 +12,48 @@ The **## API** sections below are the contract surface for the deployer service
 
 ## Unreleased
 
+### Reliability — accepted deploys survive a deployer restart
+
+Borrows are accepted (`201`) and deployed asynchronously. Previously the
+loan→binary link existed only in the in-memory `setTimeout` that ran the deploy,
+and the reconciliation sweep skipped any pending loan without a deployment
+record — so a deployer restart/crash in the window before processing **silently
+dropped the deploy** (the program never shipped despite a success response).
+
+Now the `pending` deployment record is persisted **up front** in the
+`POST /v1/loans` and `POST /v1/projects` handlers, before the deploy is
+scheduled. On-chain `pending` loan state is the durable queue; the
+reconciliation sweep deploys (or resumes) any loan with a pending/orphaned
+record. An in-memory in-flight set + the persisted status make deploy processing
+idempotent so the timer path and the sweep can't double-deploy. The sweep cadence
+is now configurable (`RECONCILE_INTERVAL_MS` default 10 min — was a mislabeled
+1h; `RECONCILE_INITIAL_DELAY_MS` default 20s). No request/response shapes changed.
+
+This is internal behavior only — **not** an API-contract change. See
+`deployer/README.md` → "Reliability & storage" for the durability model and the
+documented storage limitations (local-disk binaries with no retention; LevelDB
+single point of failure; object storage / queue called out as future work).
+
+### API — multi-program project deployments (additive)
+
+New `/v1/projects/*` endpoints let a borrower bundle 2–4 program loans created in
+a single signed transaction into one "project". Grouping is **off-chain metadata
+only** — each program stays its own on-chain `Loan` and its own
+`DeploymentRecord` (still the single source of truth for deploy status). Purely
+additive: single-program borrows keep using `/v1/loans` and never create a
+project.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `POST` | `/v1/projects` | 201. Body `{projectId (client UUID), borrower, signature, name?, programs:[{loanId, fileId, name?}]×2..4}`. Validates each `fileId` belongs to the borrower, stores the grouping, then schedules each program's deployment independently. Re-POST with the same `projectId` is idempotent; a different borrower on an existing id returns **409 `project_conflict`**. |
+| `GET` | `/v1/projects/:projectId` | 200. **Public** (no auth — keyed by the unguessable project UUID, a capability URL) so clients can poll live deploy progress without a wallet signature per poll. Aggregate `status` (`pending \| deploying \| partial \| deployed \| failed`) derived from the per-program deployment records, plus each program enriched with its own loan status + deployment record. |
+| `GET` | `/v1/projects?borrower=…&limit=…&offset=…` | 200. **Public** (no auth); `borrower` is required and scopes the list. Same `{…, total, limit, offset, hasMore}` envelope as deployments; each entry carries the lightweight aggregate status only. Reads expose nothing beyond the already-public on-chain loans. |
+| `POST` | `/v1/projects/:projectId/repayments` | 201. Body `{signature, borrower}`. Fans out one `transferDeployedProgramAuth` per program, each scheduled and `.catch`-wrapped independently. |
+
+Per-program side effects are individually error-isolated, so one program
+failing (deploy or authority transfer) never blocks the rest — recover the
+failed loan on its own via the existing per-loan flow.
+
 ### API — production server URL in the OpenAPI spec
 
 `openapi.json` (and `GET /openapi.json`) now advertise the production base URL

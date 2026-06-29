@@ -21,6 +21,7 @@ import {
   LoanStatusResponse,
 } from '../schemas';
 import type { DeploymentRecord } from './types';
+import { buildPendingDeployment } from './deployment-record';
 
 /**
  * Map the internal DeploymentRecord.status to the public LoanStatus enum.
@@ -28,7 +29,7 @@ import type { DeploymentRecord } from './types';
  * loans the borrower failed to repay; `pending` covers both "no deployment
  * record yet" and the deployer-side pending state.
  */
-function loanStatusFor(d: DeploymentRecord | null): {
+export function loanStatusFor(d: DeploymentRecord | null): {
   status: 'pending' | 'uploading' | 'deploying' | 'deployed' | 'failed' | 'repaid' | 'expired';
   updatedAt: number | null;
 } {
@@ -182,6 +183,18 @@ export function registerLoanRoutes(app: Application, deps: RouteDeps): void {
           reqId: req.id,
         });
 
+        // Persist the loan→binary link durably BEFORE scheduling the async
+        // deploy. If the process restarts in the window before the timer
+        // fires, the on-chain reconciliation loop can still find this pending
+        // record and deploy it. Guard so a re-POST never downgrades a record
+        // the deploy has already advanced.
+        const existingDeployment = await deps.stateManager.getDeployment(loanId);
+        if (!existingDeployment) {
+          await deps.stateManager.saveDeployment(
+            buildPendingDeployment(loanId, borrower, fileUpload),
+          );
+        }
+
         // Process the loan asynchronously -- give the on-chain tx a moment
         // to be confirmed before we go look for it.
         setTimeout(() => {
@@ -263,7 +276,11 @@ export function registerLoanRoutes(app: Application, deps: RouteDeps): void {
             }
             const borrowerPubkey = new PublicKey(borrower);
             const tx = await orchestrator.transferDeployedProgramAuth(loanId, borrowerPubkey);
-            deps.logger.info('loans.repay.transfer_complete', { loanId, borrower, tx });
+            if (tx) {
+              deps.logger.info('loans.repay.transfer_complete', { loanId, borrower, tx });
+            } else {
+              deps.logger.info('loans.repay.transfer_skipped', { loanId, borrower });
+            }
           } catch (err) {
             deps.logger.error('loans.repay.transfer_failed', {
               loanId,

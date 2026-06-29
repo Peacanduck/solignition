@@ -4,8 +4,10 @@ import { useProtocolConfig } from '../data-access/use-protocol-config'
 import { formatSOL } from '../lib/format'
 import {
   computeInterest,
-  computePrincipal,
   DURATION_RATES,
+  NETWORK_FEE_LAMPORTS,
+  sumPrincipal,
+  sumRent,
   type WizardAction,
   type WizardState,
 } from './use-borrow-wizard'
@@ -20,9 +22,15 @@ export function StepTerms({
 }) {
   const configQuery = useProtocolConfig()
   const adminFeeBps = configQuery.data?.data.defaultAdminFeeBps ?? 0
-  const rent = state.estimatedRent ?? 0n
+  const programCount = state.programs.length
 
-  const { network, protocolFee, principal } = computePrincipal(rent, adminFeeBps)
+  // A project carries one loan per program; each loan has its own rent +
+  // network fee + protocol fee. These totals sum across all program slots
+  // (and reduce to the single-program case when programCount === 1).
+  const rent = sumRent(state.programs)
+  const network = NETWORK_FEE_LAMPORTS * BigInt(programCount)
+  const principal = sumPrincipal(state.programs, adminFeeBps)
+  const protocolFee = principal - rent - network
   const interest = computeInterest(principal, state.interestRateBps, state.duration)
   const totalOwed = principal + interest
 
@@ -68,9 +76,18 @@ export function StepTerms({
             </div>
           </Field>
 
-          <Field label="principal · auto-calculated">
+          <Field
+            label={
+              programCount > 1
+                ? `principal · ${programCount} programs · auto-calculated`
+                : 'principal · auto-calculated'
+            }
+          >
             <div className="space-y-1.5 rounded-md bg-secondary/50 px-3 py-3">
-              <ReadoutRow label="deployment rent" value={`${formatSOL(rent, 4)} SOL`} />
+              <ReadoutRow
+                label={programCount > 1 ? 'deployment rent (all programs)' : 'deployment rent'}
+                value={`${formatSOL(rent, 4)} SOL`}
+              />
               <ReadoutRow label="network fees (est)" value={`${formatSOL(network, 4)} SOL`} />
               <ReadoutRow
                 label={`protocol fee · ${(adminFeeBps / 100).toFixed(2)}%`}

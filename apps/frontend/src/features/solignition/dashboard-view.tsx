@@ -20,6 +20,9 @@ import { useLoans, type LoanAccount } from './data-access/use-loans'
 import { useVaultBalance } from './data-access/use-vault-balance'
 import { useProtocolConfig } from './data-access/use-protocol-config'
 import { useRepayLoanMutation } from './data-access/use-repay-loan-mutation'
+import { useProjects } from './data-access/use-projects'
+import { useRepayProjectMutation } from './data-access/use-repay-project-mutation'
+import { groupLoans, type GroupedProject } from './lib/group-loans'
 import {
   calculateOwed,
   formatDuration,
@@ -48,10 +51,12 @@ export default function DashboardView() {
 }
 
 function ConnectedDashboard({ accountAddress }: { accountAddress: string }) {
+  const { account } = useSolana()
   const depositorQuery = useDepositorRecord(address(accountAddress))
   const loansQuery = useLoans(accountAddress)
   const vaultQuery = useVaultBalance()
   const configQuery = useProtocolConfig()
+  const projectsQuery = useProjects({ account: account! })
 
   const isLoading = depositorQuery.isLoading || loansQuery.isLoading
   const isError = depositorQuery.isError || loansQuery.isError
@@ -152,6 +157,7 @@ function ConnectedDashboard({ accountAddress }: { accountAddress: string }) {
 
         <LoansCard
           loans={myLoans}
+          projects={projectsQuery.data ?? []}
           activeCount={activeLoans.length}
           totalOutstanding={totalOutstanding}
         />
@@ -410,13 +416,17 @@ function EarningsCard({
 
 function LoansCard({
   loans,
+  projects,
   activeCount,
   totalOutstanding,
 }: {
   loans: LoanAccount[]
+  projects: import('./data-access/use-projects').ProjectSummary[]
   activeCount: number
   totalOutstanding: bigint
 }) {
+  const grouped = groupLoans(loans, projects)
+
   if (loans.length === 0) {
     return (
       <Card className="md:col-span-3 p-5">
@@ -480,13 +490,80 @@ function LoansCard({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loans.map((loan) => (
+            {grouped.projects.map((group) => (
+              <ProjectGroupRows key={group.summary.project.projectId} group={group} />
+            ))}
+            {grouped.standalone.map((loan) => (
               <LoanRow key={loan.address} loan={loan} />
             ))}
           </TableBody>
         </Table>
       </CardContent>
     </Card>
+  )
+}
+
+function ProjectGroupRows({ group }: { group: GroupedProject }) {
+  const { account } = useSolana()
+  const repayProject = useRepayProjectMutation({ account: account! })
+  const { project, status } = group.summary
+  // Only the still-active loans are bundled into the repay-all signature.
+  const repayableIds = group.loans
+    .filter((l) => l.data.state === LoanState.Active)
+    .map((l) => l.data.loanId)
+  const label = project.name || `project ${project.projectId.slice(0, 8)}`
+
+  return (
+    <>
+      <TableRow className="bg-secondary/30 hover:bg-secondary/30">
+        <TableCell colSpan={8} className="py-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">
+                ▣ {label}
+              </span>
+              <ProjectStatusBadge status={status} />
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {group.loans.length} program{group.loans.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            {repayableIds.length > 0 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="font-mono text-xs"
+                disabled={repayProject.isPending}
+                onClick={() =>
+                  repayProject.mutateAsync({ projectId: project.projectId, loanIds: repayableIds })
+                }
+              >
+                {repayProject.isPending ? '…' : `repay project (${repayableIds.length}) →`}
+              </Button>
+            ) : null}
+          </div>
+        </TableCell>
+      </TableRow>
+      {group.loans.map((loan) => (
+        <LoanRow key={loan.address} loan={loan} />
+      ))}
+    </>
+  )
+}
+
+function ProjectStatusBadge({
+  status,
+}: {
+  status: 'pending' | 'deploying' | 'partial' | 'deployed' | 'failed'
+}) {
+  const cls = {
+    pending: 'text-muted-foreground',
+    deploying: 'text-accent',
+    partial: 'text-warn',
+    deployed: 'text-accent',
+    failed: 'text-destructive',
+  }[status]
+  return (
+    <span className={`font-mono text-[10px] uppercase tracking-[0.16em] ${cls}`}>· {status}</span>
   )
 }
 
