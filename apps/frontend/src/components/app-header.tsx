@@ -6,6 +6,21 @@ import { Link, useLocation } from 'react-router'
 import { ClusterDropdown } from '@/components/cluster-dropdown'
 import { WalletDropdown } from '@/components/wallet-dropdown'
 
+function SolignitionMark({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M14.25 6.63 A6 6 0 1 1 9.75 6.63"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        fill="none"
+      />
+      <path d="M12 3.4 L13.3 9 L12 11.6 L10.7 9 Z" fill="#2ea957" />
+    </svg>
+  )
+}
+
 export function AppHeader({ links = [] }: { links: { label: string; path: string }[] }) {
   const { pathname } = useLocation()
   const [showMenu, setShowMenu] = useState(false)
@@ -18,9 +33,15 @@ export function AppHeader({ links = [] }: { links: { label: string; path: string
     <header className="relative z-50 px-4 py-2 bg-card/50">
       <div className="mx-auto flex justify-between items-center">
         <div className="flex items-baseline gap-4">
-          <Link to="https://www.solignition.xyz/" target="_blank" className="text-xl hover:text-neutral-500 dark:hover:text-white">
+          <a
+            href="https://www.solignition.xyz/"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 text-xl hover:text-neutral-500 dark:hover:text-white"
+          >
+            <SolignitionMark />
             <span>Solignition</span>
-          </Link>
+          </a>
           <div className="hidden md:flex items-center">
             <ul className="flex gap-4 flex-nowrap items-center">
               {links.map(({ label, path }) => (
