@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: solignition-deployer
+    metrics_path: /metrics
+    static_configs:
+      # The deployer runs under pm2 on the host at :3000. From inside the
+      # Prometheus container, the host loopback is reached via
+      # host.docker.internal (mapped to host-gateway in docker-compose.yml).
+      #
+      # If you instead run Prometheus with `network_mode: host`, or on a
+      # separate box, change this to the deployer's reachable address
+      # (e.g. localhost:3000 or the VM's private IP:3000).
+      - targets: ['host.docker.internal:3000']
+        labels:
+          service: deployer
+          env: production

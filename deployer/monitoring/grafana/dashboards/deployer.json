@@ -1,0 +1,233 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["solignition", "deployer"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Solignition Deployer",
+  "uid": "solignition-deployer",
+  "version": 1,
+  "weekStart": "",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Active loans",
+      "description": "deployer_active_loans gauge -- loans currently being monitored.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "unit": "none",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null }
+          ] } },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "area", "justifyMode": "auto" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "deployer_active_loans", "legendFormat": "active" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Deployment success rate (5m)",
+      "description": "Share of deployments with status=success over the last 5 minutes. 'failure' and 'failed' are both treated as non-success.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "unit": "percentunit", "min": 0, "max": 1,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "orange", "value": 0.8 },
+            { "color": "green", "value": 0.95 }
+          ] } },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "area", "justifyMode": "auto" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(deployer_deployments_total{status=\"success\"}[5m])) / clamp_min(sum(rate(deployer_deployments_total[5m])), 1e-9)",
+          "legendFormat": "success rate" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "File uploads (5m rate)",
+      "description": "deployer_file_uploads_total -- per-second upload rate averaged over 5m.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "unit": "reqps",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "blue", "value": null } ] } },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "area", "justifyMode": "auto" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(deployer_file_uploads_total[5m]))", "legendFormat": "uploads/s" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Deployments by status",
+      "description": "sum by(status) rate(deployer_deployments_total). Note: the code emits both 'failure' and 'failed' for failed deployments.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10, "showPoints": "never", "stacking": { "mode": "none", "group": "A" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "success" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "id": "byName", "options": "failure" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
+          { "matcher": { "id": "byName", "options": "failed" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] }
+        ]
+      },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" }, "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (status) (rate(deployer_deployments_total[$__rate_interval]))", "legendFormat": "{{status}}" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Recoveries by status",
+      "description": "sum by(status) rate(deployer_recovery_total) -- expired-loan program recoveries.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10, "showPoints": "never", "stacking": { "mode": "none", "group": "A" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "success" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "id": "byName", "options": "failure" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }
+        ]
+      },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" }, "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (status) (rate(deployer_recovery_total[$__rate_interval]))", "legendFormat": "{{status}}" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Deployment duration -- average",
+      "description": "rate(_sum)/rate(_count). Robust regardless of bucket layout.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "s",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "single", "sort": "none" }, "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(deployer_deployment_duration_seconds_sum[$__rate_interval]) / clamp_min(rate(deployer_deployment_duration_seconds_count[$__rate_interval]), 1e-9)",
+          "legendFormat": "avg duration" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Deployment duration -- p95 (bucket estimate)",
+      "description": "histogram_quantile over default prom-client buckets (max bucket 10s). Deployments longer than 10s land in +Inf, so p95 saturates -- read this alongside the average panel, and add custom buckets to the Histogram for real tail latency.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "s",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "single", "sort": "none" }, "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(deployer_deployment_duration_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Upload validation rejections by reason",
+      "description": "sum by(reason) rate(deployer_validation_rejected_total) -- ELF/size/dedup/filename rejections at /upload.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10, "showPoints": "never", "stacking": { "mode": "normal", "group": "A" } } },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" }, "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum"] } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (reason) (rate(deployer_validation_rejected_total[$__rate_interval]))", "legendFormat": "{{reason}}" }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Auth failures by code",
+      "description": "sum by(code) rate(deployer_http_auth_failures_total) -- wallet-signature verification failures. Spikes may indicate probing.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10, "showPoints": "never", "stacking": { "mode": "normal", "group": "A" } } },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" }, "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum"] } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (code) (rate(deployer_http_auth_failures_total[$__rate_interval]))", "legendFormat": "{{code}}" }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Expired loans -- checked vs recovered",
+      "description": "rate(deployer_expired_loans_checked_total) and rate(deployer_expired_loans_recovered_total) -- reconciliation-loop activity.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 28 },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" }, "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(deployer_expired_loans_checked_total[$__rate_interval]))", "legendFormat": "checked/s" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(deployer_expired_loans_recovered_total[$__rate_interval]))", "legendFormat": "recovered/s" }
+      ]
+    }
+  ]
+}

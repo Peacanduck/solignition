@@ -1,0 +1,65 @@
+# Monitoring stack for the Solignition deployer.
+#
+# The deployer itself is NOT part of this stack -- it keeps running under pm2
+# on the host (git-pull workflow untouched). Prometheus reaches the deployer's
+# /metrics endpoint over the host loopback via `host.docker.internal`, and
+# Grafana reads from Prometheus over the internal bridge network.
+#
+#   Deployer (pm2, host :3000)  <--scrape--  Prometheus (:9090)  <--query--  Grafana (:3001)
+#
+# Bring up:   docker compose -f deployer/monitoring/docker-compose.yml up -d
+# Tear down:  docker compose -f deployer/monitoring/docker-compose.yml down
+#
+# Grafana is published on :3001 so it does not collide with the deployer's
+# :3000. Do NOT expose :3001 or :9090 publicly -- reach them via SSH tunnel
+# or a GCP firewall rule scoped to your own IP.
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: solignition-prometheus
+    restart: unless-stopped
+    # host-gateway lets the container resolve the host's loopback, so
+    # Prometheus can scrape the pm2 deployer at host.docker.internal:3000.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    ports:
+      # Bind to loopback only -- open it deliberately if you need remote access.
+      - "127.0.0.1:9090:9090"
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: solignition-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      # Change this before first boot, or set it in a local .env file.
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      # We drive datasources + dashboards from provisioning files below.
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:

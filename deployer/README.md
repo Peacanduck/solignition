@@ -259,25 +259,39 @@ instance:
 ### Metrics
 
 Available Prometheus metrics:
-- `deployer_deployments_total` - Total deployments by status
-- `deployer_recovery_total` - Total recoveries by status
-- `deployer_deployment_duration_seconds` - Deployment operation duration
-- `deployer_solana_rpc_errors_total` - RPC error count
-- `deployer_active_loans` - Currently active loans
+- `deployer_deployments_total{status}` - Total deployments by status
+- `deployer_recovery_total{status}` - Total expired-loan recoveries by status
+- `deployer_deployment_duration_seconds` - Deployment operation duration (histogram)
+- `deployer_active_loans` - Currently active loans being monitored
+- `deployer_file_uploads_total` - Total file uploads
+- `deployer_expired_loans_checked_total` - Expired-loan checks performed
+- `deployer_expired_loans_recovered_total` - Expired loans recovered
+- `deployer_validation_rejected_total{reason}` - `/upload` requests rejected by validation
+- `deployer_http_auth_failures_total{code,endpoint}` - Wallet-signature auth failures
 
-### Grafana Dashboard
+### Prometheus + Grafana
 
-Import the provided dashboard JSON:
+A self-contained monitoring stack lives in [`monitoring/`](monitoring/). It runs
+Prometheus and Grafana as containers that scrape the deployer's `/metrics`
+endpoint over the host loopback — the deployer itself stays on pm2, untouched.
+
 ```bash
-cp grafana/dashboard.json /var/lib/grafana/dashboards/
+docker compose -f monitoring/docker-compose.yml up -d
 ```
 
-Key panels:
-- Deployment success rate
+Grafana is published on `127.0.0.1:3001` (admin password via
+`GF_SECURITY_ADMIN_PASSWORD`) with the Prometheus datasource and the
+**Solignition Deployer** dashboard auto-provisioned. See
+[`monitoring/README.md`](monitoring/README.md) for setup and GCP notes.
+
+Dashboard panels:
 - Active loans gauge
-- Recovery status
-- RPC error rate
-- Deployment duration histogram
+- Deployment success rate
+- Deployments / recoveries by status
+- Deployment duration (average + p95)
+- Upload validation rejections by reason
+- Auth failures by code
+- Expired loans checked vs recovered
 
 ## Security Considerations
 
