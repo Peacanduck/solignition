@@ -276,7 +276,7 @@ docker compose -f monitoring/docker-compose.yml up -d
 Grafana is published on `127.0.0.1:3001` (admin password via
 `GF_SECURITY_ADMIN_PASSWORD`) with the Prometheus datasource and the
 **Solignition Deployer** dashboard auto-provisioned. See
-[`monitoring/README.md`](monitoring/README.md) for setup and GCP notes.
+[`monitoring/README.md`](monitoring/README.md) for setup and access notes.
 
 Dashboard panels:
 - Active loans gauge

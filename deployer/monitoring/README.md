@@ -28,17 +28,19 @@ datasource and the **Solignition Deployer** dashboard (folder: *Solignition*)
 are provisioned automatically — no manual import.
 
 Both Grafana (`3001`) and Prometheus (`9090`) bind to `127.0.0.1` only. To view
-them from your laptop, SSH-tunnel rather than opening the ports publicly:
+them from your laptop, SSH-tunnel rather than opening the ports publicly (the
+deployer runs on an Azure VM):
 
 ```bash
-gcloud compute ssh <vm> -- -L 3001:127.0.0.1:3001 -L 9090:127.0.0.1:9090
+gcloud compute ssh <vm> -- -L 3001:127.0.0.1:3001 -L 9090:127.0.0.1:9090 #GCP
+ssh -L 3001:127.0.0.1:3001 -L 9090:127.0.0.1:9090 <azure-user>@<vm-ip-or-dns> #azure 
 ```
 
 ## How Prometheus reaches the deployer
 
 `prometheus.yml` targets `host.docker.internal:3000`, and the compose file maps
 `host.docker.internal` to the host gateway (`extra_hosts`). This works on Docker
-20.10+ on the Linux GCP VM and lets the container reach the pm2 process on the
+20.10+ on the Linux Azure VM and lets the container reach the pm2 process on the
 host's `localhost:3000`.
 
 Confirm the scrape target is healthy after startup:
@@ -74,9 +76,9 @@ separate box or a private VM IP), edit the `targets` list in
   deployments emit both `failure` and `failed`. The success-rate panel counts
   only `status="success"` as success, so it's correct regardless; the
   "Deployments by status" panel shows both series until the source is unified.
-- **GCP-native alternative:** instead of self-hosting, Google Managed Service
-  for Prometheus (via the Ops Agent) can scrape the same `/metrics` into Cloud
-  Monitoring / a managed Grafana. This bundle is the self-hosted option.
+- **Managed alternative:** instead of self-hosting, Azure Monitor managed
+  service for Prometheus can scrape the same `/metrics` into Azure Managed
+  Grafana. This bundle is the self-hosted option.
 
 ## Tear down
 

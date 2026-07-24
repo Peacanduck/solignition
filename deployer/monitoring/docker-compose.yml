@@ -12,7 +12,7 @@
 #
 # Grafana is published on :3001 so it does not collide with the deployer's
 # :3000. Do NOT expose :3001 or :9090 publicly -- reach them via SSH tunnel
-# or a GCP firewall rule scoped to your own IP.
+# or an Azure NSG rule scoped to your own IP.
 
 services:
   prometheus:
