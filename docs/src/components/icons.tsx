@@ -1,12 +1,13 @@
 export const Logo = ({ size = 20 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 22 22" fill="none" aria-hidden>
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
     <path
-      d="M3 3 L11 3 L11 11 L19 11 L19 19 L11 19 L11 11 L3 11 Z"
+      d="M14.25 6.63 A6 6 0 1 1 9.75 6.63"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="1.9"
+      strokeLinecap="round"
       fill="none"
     />
-    <circle cx="11" cy="11" r="2" fill="var(--accent)" />
+    <path d="M12 3.4 L13.3 9 L12 11.6 L10.7 9 Z" fill="var(--accent)" />
   </svg>
 )
 

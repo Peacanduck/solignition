@@ -1,4 +1,4 @@
-import { Link, NavLink } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { useSearch } from '../lib/search-context'
 import { Logo, SearchIcon, MenuIcon } from './icons'
 
@@ -20,12 +20,12 @@ export const DocsTopbar = ({ onOpenDrawer }: Props) => {
           <MenuIcon />
         </button>
 
-        <Link to="/get-started/intro" className="flex items-center gap-2.5 shrink-0 text-ink no-underline">
+        <a href="https://www.solignition.xyz/" className="flex items-center gap-2.5 shrink-0 text-ink no-underline">
           <span className="text-ink"><Logo /></span>
           <span className="font-semibold tracking-tight">solignition</span>
           <span className="font-mono text-ink-4 text-sm">/</span>
           <span className="font-mono text-[13px] text-ink-2">docs</span>
-        </Link>
+        </a>
 
         <button
           type="button"
