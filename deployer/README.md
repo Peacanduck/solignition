@@ -108,18 +108,12 @@ npm run dev
 npm start
 ```
 
-#### Docker
-
-```bash
-# Build Docker image
-docker build -t solana-lending-deployer .
-
-# Run with Docker Compose
-docker-compose up -d
-
-# View logs
-docker-compose logs -f deployer
-```
+> **Containerization:** the deployer is not containerized today — it runs
+> directly under pm2 (see below). There is intentionally no service Dockerfile;
+> building one is a future task that must account for the cross-package build
+> (the TypeScript build pulls in `../anchor/target/types`) and the on-disk state
+> (`deployer-state`, `binaries`, `uploads`, keypairs). The only containers in
+> this repo are the monitoring stack in [`monitoring/`](monitoring/).
 
 #### Production Deployment
 
@@ -475,15 +469,13 @@ send one) so support tickets can correlate to deployer logs.
    npm run build
    npm test
    ```
-3. Build Docker image:
-   ```bash
-   docker build -t solana-lending-deployer:vX.Y.Z .
-   ```
-4. Tag and push:
+3. Tag and push:
    ```bash
    git tag vX.Y.Z
    git push origin vX.Y.Z
    ```
+4. Deploy: pull the tag on the VM and restart under pm2
+   (`git pull && npm ci && npm run build && pm2 restart deployer`).
 
 ## Support
 
