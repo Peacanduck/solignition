@@ -1,0 +1,40 @@
+# Solignition Docs
+
+> Documentation for Solignition — a permissionless, non-custodial DeFi lending protocol on Solana that funds on-chain program deployments. Builders borrow SOL to deploy and repay to reclaim upgrade authority; liquidity providers deposit SOL and earn yield from borrower interest.
+
+These docs are served as a client-rendered single-page app. The raw Markdown (MDX) source for every page below is available on GitHub at https://github.com/Peacanduck/solignition/tree/main/docs/src/content and is the most reliable source for automated readers.
+
+## Get started
+- [Introduction](https://docs.solignition.xyz/get-started/intro): What Solignition is and why it exists.
+- [Quickstart](https://docs.solignition.xyz/get-started/quickstart): From zero to a deployed program in five minutes on devnet.
+- [Install the CLI](https://docs.solignition.xyz/get-started/cli-install): Pick a distribution channel and verify it works.
+
+## For builders
+- [Borrow & deploy](https://docs.solignition.xyz/builders/borrow-flow): End-to-end mental model of what happens when you run solignition deploy.
+- [Upgrade authority](https://docs.solignition.xyz/builders/authority): The escrow model — who can do what to your program while the loan is live.
+- [Repaying loans](https://docs.solignition.xyz/builders/repay): Pay principal + accrued interest, get your upgrade authority back.
+- [What if I default?](https://docs.solignition.xyz/builders/default): On expiry the deployed program is closed and reclaimed SOL returns to the vault.
+
+## For LPs
+- [Deposit SOL](https://docs.solignition.xyz/lps/deposit): Move SOL into the vault and start earning yield from borrower interest.
+- [Shares & yield](https://docs.solignition.xyz/lps/shares): How LP shares accrue value from borrower interest and reclaimed defaults.
+- [Withdrawing](https://docs.solignition.xyz/lps/withdraw): Redeem some or all of your shares back to SOL.
+
+## Protocol
+- [How it works](https://docs.solignition.xyz/protocol/mechanics): Config singleton + per-LP records + per-loan records + an off-chain deployer.
+- [Interest math](https://docs.solignition.xyz/protocol/interest): Linear, time-prorated interest. No compounding. Paid on repay.
+- [Loan lifecycle](https://docs.solignition.xyz/protocol/lifecycle): State machine for the Loan account — six states, four actors, one happy path.
+- [Fees & treasury](https://docs.solignition.xyz/protocol/fees): Where every lamport goes — admin fees, interest splits, treasury controls.
+
+## Reference
+- [On-chain program](https://docs.solignition.xyz/reference/program): Program ID, instruction surface, events, and PDA seeds.
+- [Account types](https://docs.solignition.xyz/reference/accounts): Field-level reference for ProtocolConfig, DepositorRecord, and Loan.
+- [Error codes](https://docs.solignition.xyz/reference/errors): All 22 Anchor error codes with likely cause and remedy.
+
+## Source
+- [Markdown source (all pages)](https://github.com/Peacanduck/solignition/tree/main/docs/src/content): Raw MDX for every documentation page.
+- [Repository](https://github.com/Peacanduck/solignition): Anchor program, frontend, deployer, and docs.
+
+## Product
+- [Launch app](https://app.solignition.xyz): Borrow to deploy or deposit to earn.
+- [Landing site](https://solignition.xyz): Product overview.

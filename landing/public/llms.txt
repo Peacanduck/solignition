@@ -1,0 +1,22 @@
+# Solignition
+
+> Solignition is a permissionless DeFi lending protocol on Solana that fronts the SOL (rent + fees) needed to deploy on-chain programs. Builders borrow to deploy and repay to reclaim upgrade authority; liquidity providers deposit SOL and earn yield from borrower interest.
+
+The median Solana program costs around 3 SOL just to deploy, which is a capital barrier for developers. Solignition removes it through a peer-to-pool mechanism: you upload compiled bytecode, the protocol deploys it on your behalf, and you repay principal plus interest. Nothing is custodial — deployment (upgrade) authority is held in escrow by a protocol PDA during the loan term and transfers to the borrower on successful repay. Interest is linear and time-prorated with no compounding. If a loan is not repaid before expiry, there is no grace period: the protocol closes the deployed program and reclaims the SOL back to the vault to protect LPs. The system is a set of on-chain Anchor accounts (a singleton protocol config, per-LP depositor records, and per-loan records) plus an off-chain deployer service that listens for loan-request events and acts on them.
+
+## App
+- [Launch app](https://app.solignition.xyz): Borrow to deploy a program, repay loans, and reclaim authority.
+- [Explore deployments](https://app.solignition.xyz/explore): Live feed of loans and deployed programs.
+
+## Documentation
+- [Docs home](https://docs.solignition.xyz): Full protocol documentation.
+- [Introduction](https://docs.solignition.xyz/get-started/intro): What Solignition is and why it exists.
+- [Quickstart](https://docs.solignition.xyz/get-started/quickstart): From zero to a deployed program in five minutes on devnet.
+- [How it works](https://docs.solignition.xyz/protocol/mechanics): Protocol mechanics and architecture.
+- [Borrow & deploy](https://docs.solignition.xyz/builders/borrow-flow): The builder borrow-to-deploy flow.
+- [Provide liquidity](https://docs.solignition.xyz/lps/deposit): Deposit SOL and earn yield as an LP.
+
+## Resources
+- [GitHub](https://github.com/Peacanduck/solignition): Source code (Anchor program, frontend, deployer, docs).
+- [X / Twitter](https://x.com/Solignition)
+- [Discord](https://discord.gg/7yBEb7GUee)

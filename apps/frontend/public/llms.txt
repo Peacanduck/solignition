@@ -1,0 +1,19 @@
+# Solignition App
+
+> The Solignition web app (app.solignition.xyz) is where builders borrow SOL to deploy Solana programs and liquidity providers deposit SOL to earn yield. Solignition is a permissionless, non-custodial DeFi lending protocol on Solana.
+
+Connect a Solana wallet to use the app. Builders upload compiled program bytecode (`.so`), request a loan for the rent + deployment fees, and the protocol deploys the program and holds its upgrade authority in escrow until the loan is repaid. Repay principal plus linear, time-prorated interest before expiry to reclaim upgrade authority. Liquidity providers deposit SOL into the vault, receive shares, and earn yield from borrower interest and reclaimed defaults. If a loan is not repaid before expiry, the protocol closes the program and reclaims the SOL to the vault.
+
+## App
+- [Home / dashboard](https://app.solignition.xyz): Connect a wallet, borrow, deposit, and manage positions.
+- [Explore deployments](https://app.solignition.xyz/explore): Live feed of loans and deployed programs.
+
+## Learn more
+- [Documentation](https://docs.solignition.xyz): Full protocol docs.
+- [Quickstart](https://docs.solignition.xyz/get-started/quickstart): Deploy your first program on devnet.
+- [Landing site](https://solignition.xyz): Product overview.
+
+## Resources
+- [GitHub](https://github.com/Peacanduck/solignition)
+- [X / Twitter](https://x.com/Solignition)
+- [Discord](https://discord.gg/7yBEb7GUee)
