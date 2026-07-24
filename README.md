@@ -56,7 +56,7 @@ The `@solignition/frontend` package, a modern web3 interface built with:
 - **Wallet UI Components**: Pre-built wallet connection components
 
 ### Deployer Service — `deployer`
-The `@solignition/deployer` package, an automated deployment service (currently runs on an Azure VM via pm2; the `Dockerfile` is for future scaling) that:
+The `@solignition/deployer` package, an automated deployment service (runs on a cloud VM via pm2; containerization is a future task) that:
 - Monitors loan requests
 - Deploys programs to Solana when loans are approved
 - Manages deployment state and binaries
