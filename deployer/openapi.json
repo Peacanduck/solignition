@@ -365,6 +365,14 @@
             "maxLength": 64,
             "pattern": "^[a-f0-9]{64}$"
           },
+          "sbpfVersion": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "SBPF bytecode version of the uploaded program (0 = legacy, 3 = SBPFv3)"
+          },
           "message": {
             "type": "string"
           }
@@ -436,6 +444,14 @@
           },
           "estimatedCost": {
             "type": "number"
+          },
+          "sbpfVersion": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "SBPF bytecode version of the uploaded program (0 = legacy, 3 = SBPFv3)"
           },
           "status": {
             "type": "string",

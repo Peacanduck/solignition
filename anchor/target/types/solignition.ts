@@ -427,7 +427,7 @@ export type Solignition = {
               },
               {
                 "kind": "account",
-                "path": "loan.loan_id",
+                "path": "loan.loanId",
                 "account": "loan"
               },
               {
@@ -682,7 +682,7 @@ export type Solignition = {
               },
               {
                 "kind": "account",
-                "path": "protocol_config.loan_counter",
+                "path": "protocolConfig.loanCounter",
                 "account": "protocolConfig"
               },
               {
@@ -859,7 +859,7 @@ export type Solignition = {
               },
               {
                 "kind": "account",
-                "path": "loan.loan_id",
+                "path": "loan.loanId",
                 "account": "loan"
               },
               {

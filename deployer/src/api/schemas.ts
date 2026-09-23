@@ -57,6 +57,15 @@ export const Sha256Hex = z
   .length(64)
   .regex(/^[a-f0-9]{64}$/, 'must be 64 lowercase hex chars');
 
+// SBPF bytecode version from the program ELF's e_flags (SIMD-0161). null when
+// e_flags names no known version.
+export const SbpfVersion = z
+  .number()
+  .int()
+  .nonnegative()
+  .nullable()
+  .openapi({ description: 'SBPF bytecode version of the uploaded program (0 = legacy, 3 = SBPFv3)' });
+
 // ── Record schemas (responses) ─────────────────────────────────────────────
 export const DeploymentStatus = z.enum([
   'pending',
@@ -110,6 +119,7 @@ export const FileUploadRecord = z
     fileSize: z.number().int().nonnegative(),
     binaryHash: Sha256Hex,
     estimatedCost: z.number(),
+    sbpfVersion: SbpfVersion.optional(),
     status: FileUploadStatus,
     createdAt: z.number().int(),
   })
@@ -208,6 +218,7 @@ export const CreateUploadResponse = z
     fileId: FileId,
     estimatedCost: z.number(),
     binaryHash: Sha256Hex,
+    sbpfVersion: SbpfVersion.optional(),
     message: z.string(),
   })
   .openapi('CreateUploadResponse');

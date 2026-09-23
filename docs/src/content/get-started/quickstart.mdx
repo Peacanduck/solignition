@@ -18,7 +18,7 @@ description: From zero to a deployed program in five minutes on devnet.
 - **Solana CLI installed.** `solana --version` should print something.
 - **A devnet keypair.** `solana-keygen new -o ~/.config/solana/id.json` if you don't have one.
 - **~1 SOL on devnet** to cover transaction fees and the admin fee. Airdrop with `solana airdrop 2 --url https://api.devnet.solana.com`.
-- **A compiled `.so`** at `target/deploy/*.so`. Any Anchor or native BPF program works.
+- **A compiled `.so`** at `target/deploy/*.so`, built for SBPFv3. Anchor ≥ 1.2 targets it by default; for native programs use `cargo build-sbf --arch v3`.
 
 If you haven't installed the CLI yet, do that first: [Install the CLI](/get-started/cli-install).
 

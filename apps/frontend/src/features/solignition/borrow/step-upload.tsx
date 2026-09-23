@@ -87,13 +87,13 @@ export function StepUpload({
       <SidePanel
         title="WHAT IS A .SO FILE?"
         rows={[
-          ['format', 'compiled BPF bytecode'],
-          ['source', 'anchor build / cargo build-sbf'],
+          ['format', 'SBPFv3 bytecode'],
+          ['source', 'anchor build (1.2+) / cargo build-sbf'],
           ['typical size', '50–500 KB'],
           ['typical cost', '2–6 SOL'],
           ['per project', `up to ${MAX_PROGRAMS_PER_PROJECT} programs`],
         ]}
-        tip="Run `anchor build` in your workspace to produce target/deploy/<name>.so"
+        tip="Run `anchor build` (Anchor 1.2+ targets SBPFv3) or `cargo build-sbf --arch v3` to produce target/deploy/<name>.so"
       />
     </div>
   )

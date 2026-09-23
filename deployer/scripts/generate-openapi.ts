@@ -58,7 +58,7 @@ const stubDeps: RouteDeps = {
     validationRejected: stubCounter,
     authFailures: stubCounter,
   },
-  config: { authMode: 'off', maxUploadBytes: 4 * 1024 * 1024, uploadPath: '/tmp' },
+  config: { authMode: 'off', maxUploadBytes: 4 * 1024 * 1024, uploadPath: '/tmp', minSbpfVersion: 0 },
   processLoanFromSignature: async () => undefined,
 };
 

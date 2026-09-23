@@ -28,7 +28,7 @@ pub fn process_claim_admin(ctx: Context<ClaimAdmin>) -> Result<()> {
 
          transfer(
             CpiContext::new_with_signer(
-                ctx.accounts.system_program.to_account_info(),
+                ctx.accounts.system_program.key(),
                 Transfer {
                     from: ctx.accounts.admin_pda.to_account_info(),
                     to: ctx.accounts.treasury.to_account_info(),
