@@ -37,6 +37,9 @@ dist-ssr
 /anchor/target/release
 /anchor/target/sbf-solana-solana
 /anchor/target/sbpf-solana-solana
+/anchor/target/sbpfv3-solana-solana
+# Anchor >= 1.2 error-constants file; nothing imports it
+/anchor/target/types/*_errors.ts
 /anchor/target/test-ledger
 /anchor/target/.rustc_info.json
 /anchor/.surfpool

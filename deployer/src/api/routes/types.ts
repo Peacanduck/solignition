@@ -32,6 +32,8 @@ export interface FileUploadRecord {
   fileSize: number;
   binaryHash: string;
   estimatedCost: number;
+  /** SBPF bytecode version from the ELF e_flags; absent on pre-SBPFv3-check uploads. */
+  sbpfVersion?: number | null;
   status: 'pending' | 'ready' | 'deployed';
   createdAt: number;
 }
@@ -139,6 +141,8 @@ export interface DeployerConfigSlice {
   authMode: AuthMode;
   maxUploadBytes: number;
   uploadPath: string;
+  /** Lowest SBPF version accepted on upload (see sbpf.ts). */
+  minSbpfVersion: number;
 }
 
 /**

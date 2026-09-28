@@ -17,6 +17,7 @@ import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
 import { httpError } from '../error-handler';
+import { checkSbpfBinary } from '../../sbpf';
 import { z } from 'zod';
 
 import {
@@ -130,6 +131,14 @@ export function registerUploadRoutes(app: Application, deps: RouteDeps): void {
             throw httpError.badRequest('File is not a valid ELF binary', 'not_elf');
           }
 
+          // SBPF version gate (SIMD-0500): reject bytecode the cluster will
+          // refuse to deploy, before a loan can be requested against it.
+          const sbpf = checkSbpfBinary(buffer, deps.config.minSbpfVersion);
+          if ('code' in sbpf) {
+            deps.metrics.validationRejected.inc({ reason: sbpf.code });
+            throw httpError.badRequest(sbpf.reason, sbpf.code);
+          }
+
           if (buffer.length > deps.config.maxUploadBytes) {
             deps.metrics.validationRejected.inc({ reason: 'too_large' });
             throw httpError.payloadTooLarge(
@@ -164,6 +173,7 @@ export function registerUploadRoutes(app: Application, deps: RouteDeps): void {
               fileId: dupe.fileId,
               estimatedCost: dupe.estimatedCost,
               binaryHash: dupe.binaryHash,
+              sbpfVersion: sbpf.sbpfVersion,
               message: 'Matching upload already exists for this wallet.',
             };
           }
@@ -199,6 +209,7 @@ export function registerUploadRoutes(app: Application, deps: RouteDeps): void {
             fileSize: buffer.length,
             binaryHash: storedHash,
             estimatedCost,
+            sbpfVersion: sbpf.sbpfVersion,
             status: 'ready',
             createdAt: Date.now(),
           };
@@ -212,6 +223,7 @@ export function registerUploadRoutes(app: Application, deps: RouteDeps): void {
             fileId,
             estimatedCost,
             binaryHash: storedHash,
+            sbpfVersion: sbpf.sbpfVersion,
             message: 'File uploaded successfully. You can now request a loan for deployment.',
           };
         } finally {

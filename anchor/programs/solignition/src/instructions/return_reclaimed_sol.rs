@@ -39,7 +39,7 @@ use crate::events::SolReclaimed;
 
         transfer(
          CpiContext::new(
-            ctx.accounts.system_program.to_account_info(),
+            ctx.accounts.system_program.key(),
             Transfer {
                 from: ctx.accounts.deployer.to_account_info(),
                 to: ctx.accounts.vault.to_account_info(),

@@ -17,7 +17,7 @@ description: End-to-end mental model of what happens when you run `solignition d
 
 Only the compiled `.so` binary. The protocol does not need source, an IDL, or metadata.
 
-- **Format:** standard Solana BPF binary (the file `anchor build` puts in `target/deploy/`).
+- **Format:** a Solana program binary (the file `anchor build` puts in `target/deploy/`), built for **SBPFv3** — the default in Anchor ≥ 1.2, or `cargo build-sbf --arch v3`. Once SIMD-0500 activates, the network rejects deploys and upgrades of older bytecode, and the deployer rejects older uploads.
 - **Max size:** 10 MB.
 - **Storage:** the deployer service stores the binary off-chain after `solignition upload`. You get a File ID back and can reference it on subsequent `deploy` calls.
 

@@ -85,7 +85,7 @@ pub fn process_withdraw(ctx: Context<Withdraw>, shares: u64) -> Result<()> {
     */
     transfer(
             CpiContext::new_with_signer(
-                ctx.accounts.system_program.to_account_info(),
+                ctx.accounts.system_program.key(),
                 Transfer {
                     from: ctx.accounts.vault.to_account_info(),
                     to: ctx.accounts.depositor.to_account_info(),

@@ -72,6 +72,12 @@ interface DeployerConfig {
   solanaCliPath?: string;
   /** Maximum bytes accepted by `POST /upload`. Default 4 MB. */
   maxUploadBytes: number;
+  /**
+   * Lowest SBPF bytecode version accepted by `POST /v1/uploads`. Default 0
+   * (accept all). Set to 3 once SIMD-0500 is active on `cluster` -- after that
+   * the loader rejects deploys of older bytecode.
+   */
+  minSbpfVersion: number;
   /** Wallet-signature auth enforcement mode: `enforce` | `warn` | `off`. */
   authMode: AuthMode;
   /** Frontend origins explicitly allowed by CORS, in addition to defaults. */
@@ -99,6 +105,7 @@ const config: DeployerConfig = {
   graphqlEndpoint: process.env.GRAPHQL_ENDPOINT || 'http://127.0.0.1:18488/subgraphs',
   solanaCliPath: process.env.SOLANA_CLI_PATH || 'solana',
   maxUploadBytes: parseInt(process.env.MAX_UPLOAD_BYTES || '4194304'),
+  minSbpfVersion: parseInt(process.env.MIN_SBPF_VERSION || '0'),
   authMode: parseAuthMode(process.env.REQUIRE_AUTH),
   deployerKeypairPassphrase: process.env.DEPLOYER_KEYPAIR_PASSPHRASE,
   adminKeypairPassphrase: process.env.ADMIN_KEYPAIR_PASSPHRASE,
@@ -188,6 +195,7 @@ interface FileUploadRecord {
   fileSize: number;
   binaryHash: string;
   estimatedCost: number;
+  sbpfVersion?: number | null;
   status: 'pending' | 'ready' | 'deployed';
   createdAt: number;
 }
@@ -2596,6 +2604,7 @@ class ApiServer {
         authMode: config.authMode,
         maxUploadBytes: config.maxUploadBytes,
         uploadPath: config.uploadPath,
+        minSbpfVersion: config.minSbpfVersion,
       },
       processLoanFromSignature: (sig, borrower, fileUpload, loanId) =>
         this.processLoanFromSignature(sig, borrower, fileUpload, loanId),

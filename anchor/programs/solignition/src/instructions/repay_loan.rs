@@ -60,7 +60,7 @@ use crate::events::LoanRepaid;
         */
             transfer(
          CpiContext::new(
-            ctx.accounts.system_program.to_account_info(),
+            ctx.accounts.system_program.key(),
             Transfer {
                 from: ctx.accounts.borrower.to_account_info(),
                 to: ctx.accounts.admin_pda.to_account_info(),
@@ -92,7 +92,7 @@ use crate::events::LoanRepaid;
 
     transfer(
          CpiContext::new(
-            ctx.accounts.system_program.to_account_info(),
+            ctx.accounts.system_program.key(),
             Transfer {
                 from: ctx.accounts.borrower.to_account_info(),
                 to: ctx.accounts.vault.to_account_info(),

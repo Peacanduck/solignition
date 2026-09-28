@@ -12,10 +12,10 @@
   ],
   "scripts": {
     "anchor": "cd anchor && anchor",
-    "anchor-build": "cd anchor && anchor build",
+    "anchor-build": "cd anchor && anchor build --arch v3 --tools-version v1.57",
     "anchor-localnet": "cd anchor && anchor localnet",
     "anchor-test": "cd anchor && anchor run test",
-    "surfpool": "cd anchor && surfpool start",
+    "surfpool": "cd anchor && surfpool start --offline",
     "backend": "cd deployer && npm run dev",
     "frontend": "npm run dev -w @solignition/frontend",
     "build": "npm run build -w @solignition/frontend",
@@ -29,7 +29,7 @@
     "test:full": "concurrently -k -n SURFPOOL,ANCHOR_TEST -c blue,magenta \"npm run surfpool\" \"wait-on tcp:8899 && npm run anchor-test\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "setup": "npm run anchor keys sync && npm run anchor build && npm run codama:js && npm run sync:anchor",
+    "setup": "npm run anchor keys sync && npm run anchor-build && npm run codama:js && npm run sync:anchor",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "tag-release": "changeset tag"

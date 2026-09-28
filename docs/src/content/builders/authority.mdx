@@ -49,9 +49,9 @@ Plan accordingly: pick a loan duration that matches how stable you expect the de
 
 Once state is `Repaid`, you hold standard BPF upgrade authority on `program_pubkey`. From there it's vanilla Solana:
 
-- **Upgrade:** `solana program deploy --upgrade-authority ./me.json --program-id <programPubkey> new_version.so`.
+- **Upgrade:** `solana program deploy --upgrade-authority ./me.json --program-id <programPubkey> new_version.so`. Once SIMD-0500 activates, `new_version.so` must be built for SBPFv3.
 - **Rotate authority:** `solana program set-upgrade-authority <programPubkey> --new-upgrade-authority <newAuthority>`.
-- **Freeze (make immutable):** `solana program set-upgrade-authority <programPubkey> --final`. **Irreversible.**
+- **Freeze (make immutable):** `solana program set-upgrade-authority <programPubkey> --final`. **Irreversible.** After SIMD-0500, only SBPFv3 programs can be frozen.
 - **Close (recover rent):** `solana program close <programPubkey> --recipient <walletPubkey>`. Also **irreversible**.
 
 The protocol has no further claim on the program after `Repaid`.

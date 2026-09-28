@@ -12,6 +12,35 @@ The **## API** sections below are the contract surface for the deployer service
 
 ## Unreleased
 
+### Program — rebuilt for SBPFv3 on Anchor 1.2
+
+The on-chain program now builds as **SBPFv3** (`e_flags = 0x3`) on Anchor 1.2
+(`anchor build --arch v3 --tools-version v1.57`, Agave CLI ≥ 4.1). Once
+SIMD-0500 activates, the loader rejects upgrades of pre-v3 bytecode, so this is
+the prerequisite for shipping any further program fix. No interface change:
+discriminators, account layouts, events and error codes are identical, and the
+JSON IDL is byte-identical (an Anchor post-build hook restores the
+`event_authority` PDA seeds that Anchor 1.2 stops emitting, which the Codama
+client relies on). Dropped the unused `anchor-spl` dependency, which pulled in
+solana 2.x crates. Rollout is an in-place upgrade under the same program ID;
+existing state is preserved.
+
+### API — upload SBPF version gate + `sbpfVersion` field (additive)
+
+`POST /v1/uploads` now reads the SBPF bytecode version from the uploaded ELF
+header and returns it as `sbpfVersion` (`0` = legacy … `3` = SBPFv3; `null` if
+the header names no known version). New uploads also store it on the
+`FileUploadRecord`, so `GET /v1/uploads*` include it (absent on older records).
+Two new `400` rejections, both before anything is persisted:
+
+- **`bad_elf`** — the file is ELF but not a 64-bit little-endian SBPF object
+  (previously accepted, then failed at deploy time after the loan disbursed).
+- **`legacy_sbpf`** — the program's SBPF version is below `MIN_SBPF_VERSION`
+  (env, default `0` = accept all). Set it to `3` once SIMD-0500 is active on the
+  deployer's cluster; after that the network refuses to deploy older bytecode.
+
+The new field is optional and no existing field changed.
+
 ### Reliability — accepted deploys survive a deployer restart
 
 Borrows are accepted (`201`) and deployed asynchronously. Previously the

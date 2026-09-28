@@ -1,6 +1,6 @@
 [toolchain]
-anchor_version = "0.31.1"
-solana_version = "2.3.0"
+anchor_version = "1.2.0"
+solana_version = "4.1.2"
 package_manager = "yarn"
 
 [features]
@@ -13,9 +13,6 @@ solignition = "HVzpjSxwECnb6uY9Jnia48oJp4xrQiz5jgc5hZC5df63"
 [programs.localnet]
 solignition = "HVzpjSxwECnb6uY9Jnia48oJp4xrQiz5jgc5hZC5df63"
 
-[registry]
-url = "https://api.apr.dev"
-
 [provider]
 cluster = "devnet"
 wallet = "~/.config/solana/id.json"
@@ -26,6 +23,12 @@ testA = "vitest"
 testFix = "NODE_PATH=/root/projects/solignition/node_modules npx ts-mocha -p ./tsconfig.json -t 1000000 tests/genfunction.test.ts -g fixLoansOutstanding"
 testInit = "NODE_PATH=/root/projects/solignition/node_modules npx ts-mocha -p ./tsconfig.json -t 1000000 tests/genfunction.test.ts -g initialize"
 testUpdateConfig = "NODE_PATH=/root/projects/solignition/node_modules npx ts-mocha -p ./tsconfig.json -t 1000000 tests/genfunction.test.ts -g update_config"
+
+[hooks]
+# Anchor 1.2 drops the event_authority PDA seeds from the IDL; restore them so
+# the Codama-generated client keeps auto-deriving the account.
+# Relative path: run anchor from this directory (as the root npm scripts do).
+post-build = "node scripts/restore-event-authority-pda.mjs"
 
 [test]
 startup_wait = 5000
