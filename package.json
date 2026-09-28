@@ -15,7 +15,7 @@
     "anchor-build": "cd anchor && anchor build --arch v3 --tools-version v1.57",
     "anchor-localnet": "cd anchor && anchor localnet",
     "anchor-test": "cd anchor && anchor run test",
-    "surfpool": "cd anchor && surfpool start",
+    "surfpool": "cd anchor && surfpool start --offline",
     "backend": "cd deployer && npm run dev",
     "frontend": "npm run dev -w @solignition/frontend",
     "build": "npm run build -w @solignition/frontend",
